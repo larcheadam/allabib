@@ -20,8 +20,8 @@
   <!-- FontAwesome for Premium Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-  <!-- TailwindCSS (Optional fallback if needed but we write Vanilla CSS as per instructions) -->
-  <link rel="stylesheet" href="styles.css">
+  <!-- Application Design System -->
+  <link rel="stylesheet" href="styles.css?v=v3">
 
   <!-- External Libraries (Supabase, HTML5-QRCode, QRCode.js) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.8/dist/umd/supabase.js"></script>
@@ -333,6 +333,7 @@
           <button class="btn btn-secondary active" id="teach-tab-schedule" data-key="teach_tab_schedule"><i class="fa-solid fa-calendar-day"></i> جدول الحصص</button>
           <button class="btn btn-secondary" id="teach-tab-attendance" data-key="teach_tab_attendance"><i class="fa-solid fa-clipboard-user"></i> تسجيل الحضور</button>
           <button class="btn btn-secondary" id="teach-tab-files" data-key="teach_tab_files"><i class="fa-solid fa-cloud-arrow-up"></i> رفع الموارد الرقمية</button>
+          <button class="btn btn-secondary" id="teach-tab-summons"><i class="fa-solid fa-user-gear"></i> استدعاء ولي الأمر</button>
           <button class="btn btn-secondary" id="teach-tab-req" data-key="teach_tab_req"><i class="fa-solid fa-triangle-exclamation"></i> الإلغاءات والتعويضات</button>
         </div>
 
@@ -439,6 +440,28 @@
             <button type="submit" class="btn btn-primary mt-3" id="btn-upload-resource">
               <span data-key="btn_share_resource">رفع ونشر الملف</span>
               <i class="fa-solid fa-share-nodes"></i>
+            </button>
+          </form>
+        </div>
+
+        <!-- SECTION: Teacher Parent Summons Request -->
+        <div id="teacher-summons-section" class="teacher-view-section card mt-3">
+          <h3><i class="fa-solid fa-user-gear"></i> <span>إصدار استدعاء ولي أمر تلميذ</span></h3>
+          <p class="info-text text-muted">يمكنك اختيار تلميذ وكتابة سبب استدعاء ولي أمره لإبلاغ الإدارة والتلميذ فوراً.</p>
+          
+          <form id="teacher-summons-form" class="mt-4">
+            <div class="form-group">
+              <label for="teach-sum-student-select">اختر التلميذ(ة)</label>
+              <select id="teach-sum-student-select" class="form-control" required>
+                <option value="">-- اختر التلميذ --</option>
+              </select>
+            </div>
+            <div class="form-group mt-3">
+              <label for="teach-sum-reason">سبب ومبرر الاستدعاء</label>
+              <textarea id="teach-sum-reason" class="form-control" rows="3" placeholder="بسبب تكرار الغياب / الإخلال بالنظام..." required></textarea>
+            </div>
+            <button type="submit" class="btn btn-warning mt-3">
+              <i class="fa-solid fa-paper-plane"></i> <span>إصدار وتأكيد الاستدعاء</span>
             </button>
           </form>
         </div>
@@ -1135,7 +1158,7 @@
       </div>
     </div>
   <!-- Main Application Logic Script -->
-  <script src="app.js" defer></script>
+  <script src="app.js?v=v3" defer></script>
 
   <!-- Safety Fallback Script: Guarantee Loader Dismissal -->
   <script>
