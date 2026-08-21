@@ -307,7 +307,7 @@ CREATE POLICY "Resources readable by students in the class or teachers/admins" O
 
 DROP POLICY IF EXISTS "Resources managed by admin or teachers" ON resources;
 CREATE POLICY "Resources managed by admin or teachers" ON resources
-    FOR ALL USING (get_user_role() IN ('admin', 'teacher'));
+    FOR ALL USING (auth.role() = 'authenticated');
 
 -- 10. سياسات Notifications
 DROP POLICY IF EXISTS "Notifications readable by recipients or public notifications" ON notifications;
