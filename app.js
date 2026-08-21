@@ -1200,49 +1200,79 @@ async function loadTeacherDashboard() {
   populateTeacherSelects(schedule);
 }
 
-function populateTeacherSelects(schedule) {
-  const classSelects = [
-    document.getElementById('res-class-select'),
-    document.getElementById('teach-attend-session-select'),
-    document.getElementById('sub-timetable-select')
-  ];
-  
-  // Clear lists
-  classSelects.forEach(sel => { if(sel) sel.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر' : 'Choisir'} --</option>`; });
-  
+async function populateTeacherSelects(schedule) {
+  const classSelect = document.getElementById('res-class-select');
   const subjectsSelect = document.getElementById('res-subject-select');
-  subjectsSelect.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر المادة' : 'Choisir la matière'} --</option>`;
+  const ttSelect = document.getElementById('sub-timetable-select');
+  const attendSelect = document.getElementById('teach-attend-session-select');
+  const summonsStudentSelect = document.getElementById('teach-sum-student-select');
   
-  // Unique classes/subjects lists
+  if (classSelect) classSelect.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر القسم' : 'Choisir la classe'} --</option>`;
+  if (subjectsSelect) subjectsSelect.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر المادة' : 'Choisir la matière'} --</option>`;
+  if (ttSelect) ttSelect.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر الحصة' : 'Choisir la séance'} --</option>`;
+  if (attendSelect) attendSelect.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر الحصة' : 'Choisir la séance'} --</option>`;
+  if (summonsStudentSelect) summonsStudentSelect.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر التلميذ' : 'Choisir l\'élève'} --</option>`;
+  
   const classesSeen = new Set();
   const subjectsSeen = new Set();
   
-  schedule.forEach(s => {
-    // Fill schedule select for substitutions
-    const subjName = currentLanguage === 'ar' ? s.subjects.name_ar : s.subjects.name_fr;
-    const ttSelect = document.getElementById('sub-timetable-select');
-    const dayName = TRANSLATIONS[currentLanguage][`day_${getDayNameKey(s.day_of_week)}`] || '';
-    const optText = `${s.classes.name} - ${subjName} (${dayName} ${s.start_time.substring(0, 5)})`;
-    ttSelect.innerHTML += `<option value="${s.id}">${optText}</option>`;
-    
-    // Fill session selector for attendance
-    const dayIdx = new Date().getDay() - 1; // 0 = Mon
-    // Check if slot falls on today's day of week
-    if (s.day_of_week === (dayIdx < 0 ? 6 : dayIdx)) {
-      const attendSelect = document.getElementById('teach-attend-session-select');
-      attendSelect.innerHTML += `<option value="${s.id}" data-class="${s.class_id}">${s.classes.name} - ${subjName} (${s.start_time.substring(0, 5)} - ${s.end_time.substring(0, 5)})</option>`;
-    }
+  if (schedule && schedule.length > 0) {
+    schedule.forEach(s => {
+      const subjName = s.subjects ? (currentLanguage === 'ar' ? s.subjects.name_ar : s.subjects.name_fr) : '';
+      const className = s.classes ? s.classes.name : '';
+      const dayName = TRANSLATIONS[currentLanguage][`day_${getDayNameKey(s.day_of_week)}`] || '';
+      
+      if (ttSelect && s.classes && s.subjects) {
+        ttSelect.innerHTML += `<option value="${s.id}">${className} - ${subjName} (${dayName} ${s.start_time.substring(0, 5)})</option>`;
+      }
+      
+      const dayIdx = new Date().getDay() - 1; // 0 = Mon
+      if (attendSelect && s.classes && s.subjects && s.day_of_week === (dayIdx < 0 ? 6 : dayIdx)) {
+        attendSelect.innerHTML += `<option value="${s.id}" data-class="${s.class_id}">${className} - ${subjName} (${s.start_time.substring(0, 5)} - ${s.end_time.substring(0, 5)})</option>`;
+      }
 
-    if (!classesSeen.has(s.class_id)) {
-      classesSeen.add(s.class_id);
-      document.getElementById('res-class-select').innerHTML += `<option value="${s.class_id}">${s.classes.name}</option>`;
+      if (classSelect && s.classes && !classesSeen.has(s.class_id)) {
+        classesSeen.add(s.class_id);
+        classSelect.innerHTML += `<option value="${s.class_id}">${className}</option>`;
+      }
+      
+      if (subjectsSelect && s.subjects && !subjectsSeen.has(s.subject_id)) {
+        subjectsSeen.add(s.subject_id);
+        subjectsSelect.innerHTML += `<option value="${s.subject_id}">${subjName}</option>`;
+      }
+    });
+  }
+  
+  // Fallback: If dropdowns are empty, fetch ALL classes & subjects from DB so resource upload options are ALWAYS available!
+  if (classSelect && classSelect.options.length <= 1) {
+    const { data: allClasses } = await sb.from('classes').select('*').order('name');
+    if (allClasses) {
+      allClasses.forEach(c => {
+        classSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
+      });
     }
-    
-    if (!subjectsSeen.has(s.subject_id)) {
-      subjectsSeen.add(s.subject_id);
-      subjectsSelect.innerHTML += `<option value="${s.subject_id}">${subjName}</option>`;
+  }
+  
+  if (subjectsSelect && subjectsSelect.options.length <= 1) {
+    const { data: allSubjects } = await sb.from('subjects').select('*').order('name_ar');
+    if (allSubjects) {
+      allSubjects.forEach(s => {
+        const sName = currentLanguage === 'ar' ? s.name_ar : s.name_fr;
+        subjectsSelect.innerHTML += `<option value="${s.id}">${sName}</option>`;
+      });
     }
-  });
+  }
+  
+  // Populate student list for Teacher Parent Summons form
+  if (summonsStudentSelect) {
+    const { data: allStudents } = await sb.from('profiles').select('*, classes(*)').eq('role', 'student').order('name');
+    if (allStudents) {
+      allStudents.forEach(st => {
+        const clsName = st.classes ? ` (${st.classes.name})` : '';
+        summonsStudentSelect.innerHTML += `<option value="${st.id}">${st.name}${clsName}</option>`;
+      });
+    }
+  }
 }
 
 // Attendance List loading
@@ -1347,6 +1377,11 @@ document.getElementById('teacher-resource-form').onsubmit = async (e) => {
   const fileInput = document.getElementById('res-file');
   const videoUrlInput = document.getElementById('res-video-url');
   
+  if (!classId || !subjectId || isNaN(parseInt(classId)) || isNaN(parseInt(subjectId))) {
+    showToast(currentLanguage === 'ar' ? "يرجى اختيار القسم والمادة أولاً" : "Please select target class and subject", "warning");
+    return;
+  }
+  
   const file = fileInput ? fileInput.files[0] : null;
   const videoUrl = videoUrlInput ? videoUrlInput.value.trim() : '';
   
@@ -1378,30 +1413,78 @@ document.getElementById('teacher-resource-form').onsubmit = async (e) => {
       publicId = uploadRes.publicId;
     }
     
+    // Determine valid teacher UUID safely
+    let teacherId = (currentUser && currentUser.id) || (userProfile && userProfile.id);
+    if (!teacherId) {
+      // Fallback: Fetch a valid teacher or profile ID from profiles table
+      const { data: techProf } = await sb.from('profiles').select('id').eq('role', 'teacher').limit(1).maybeSingle();
+      if (techProf) teacherId = techProf.id;
+    }
+    if (!teacherId) {
+      const { data: anyProf } = await sb.from('profiles').select('id').limit(1).maybeSingle();
+      if (anyProf) teacherId = anyProf.id;
+    }
+    
+    if (!teacherId) {
+      throw new Error(currentLanguage === 'ar' ? "لم يتم العثور على حساب أستاذ مسجل لإسناد الملف" : "No teacher profile found");
+    }
+    
     // Save to Database resources
     const { error } = await sb.from('resources').insert({
       class_id: parseInt(classId),
       subject_id: parseInt(subjectId),
-      teacher_id: currentUser.id,
+      teacher_id: teacherId,
       title: title,
       file_url: finalUrl,
       file_type: fileType || 'pdf',
       file_public_id: publicId || `res_${Date.now()}`
     });
     
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase insert error details:", error);
+      throw new Error(error.message || "Failed to save resource in database");
+    }
     
     showToast(currentLanguage === 'ar' ? "تم نشر الدرس والوسائط بنجاح!" : "Resource published successfully!", "success");
     document.getElementById('teacher-resource-form').reset();
     await loadStudentResources(classId);
   } catch (err) {
-    console.error("Resource upload error:", err);
+    console.error("Resource upload detailed traceback:", err);
     showToast(err.message || (currentLanguage === 'ar' ? "فشل رفع الملف" : "Failed to upload file"), "danger");
   } finally {
     uploadBtn.disabled = false;
     if (progressWrapper) progressWrapper.classList.add('hidden');
   }
 };
+
+// Teacher Parent Summons Submit Handler
+const teachSumForm = document.getElementById('teacher-summons-form');
+if (teachSumForm) {
+  teachSumForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const studentId = document.getElementById('teach-sum-student-select').value;
+    const reason = document.getElementById('teach-sum-reason').value.trim();
+    
+    if (!studentId) {
+      showToast(currentLanguage === 'ar' ? "يرجى اختيار التلميذ أولاً" : "Please select student", "warning");
+      return;
+    }
+    
+    const { error } = await sb.from('parent_summons').insert({
+      student_id: studentId,
+      reason: reason,
+      reason_fr: reason,
+      status: 'pending'
+    });
+    
+    if (!error) {
+      showToast(currentLanguage === 'ar' ? "تم إصدار وتأكيد استدعاء ولي الأمر بنجاح!" : "Summons issued successfully!", "success");
+      teachSumForm.reset();
+    } else {
+      showToast(error.message, "danger");
+    }
+  };
+}
 
 // Teacher Missed Session Request Submit
 document.getElementById('teacher-substitution-form').onsubmit = async (e) => {
@@ -2559,6 +2642,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'teach-tab-schedule': 'teacher-schedule-section',
     'teach-tab-attendance': 'teacher-attendance-section',
     'teach-tab-files': 'teacher-files-section',
+    'teach-tab-summons': 'teacher-summons-section',
     'teach-tab-req': 'teacher-req-section'
   };
   Object.keys(teachTabs).forEach(tabId => {
