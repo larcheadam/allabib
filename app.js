@@ -4,7 +4,7 @@
 const SUPABASE_URL = "https://pfyhjbwqtiuchkmnlgaf.supabase.co";
 const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_lkR8CKbCS_GKX0a5AodCuQ_od_v4_WQ";
 const CLOUDINARY_CLOUD_NAME = "ilbpvbdc";
-const CLOUDINARY_UPLOAD_PRESET = "allabib_preset"; // Create unsigned preset named 'allabib_preset' in Cloudinary dashboard
+const CLOUDINARY_UPLOAD_PRESET = "allabib"; // Unsigned preset named 'allabib' in Cloudinary dashboard
 
 // Initialize Supabase Client
 // The UMD CDN build of @supabase/supabase-js exports as window.supabase
