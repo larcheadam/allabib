@@ -72,9 +72,9 @@ const TRANSLATIONS = {
     date: "التاريخ",
     status: "الحالة",
     justification: "المبرر",
-    exam_countdown: "العد التنازلي للاختبارات",
-    days_remaining: "يوم متبقي للامتحان الوطني الموحد",
-    exam_date_notice: "الامتحان الوطني الموحد المبرمج في يونيو 2027.",
+    exam_countdown: "مواعيد الاختبارات المبرمجة",
+    days_remaining: "يوم متبقي عن أقرب اختبار",
+    no_exams_scheduled: "لم تتم برمجة أي مواعيد اختبارات لقسمك بعد.",
     
     // Teacher Dashboard
     teacher_welcome_subtitle: "بوابة الأستاذ لإدارة الحضور ومشاركة الموارد الرقمية والجدولة الحصصية.",
@@ -262,9 +262,9 @@ const TRANSLATIONS = {
     date: "Date",
     status: "Statut",
     justification: "Justificatif",
-    exam_countdown: "Compte �  rebours des examens",
-    days_remaining: "jours restants avant l'examen national",
-    exam_date_notice: "L'examen national unifié est prévu pour Juin 2027.",
+    exam_countdown: "Dates des examens programmés",
+    days_remaining: "jours restants avant le prochain examen",
+    no_exams_scheduled: "Aucune date d'examen programmée pour votre classe pour le moment.",
 
     // Teacher Dashboard
     teacher_welcome_subtitle: "Portail Enseignant pour gérer les présences, partager les ressources et consulter les séances.",
@@ -914,13 +914,46 @@ async function loadStudentNotifications() {
   }).join('') || '<p class="empty-notif">لا توجد إشعارات جديدة حالياً.</p>';
 }
 async function loadStudentExams(classId) {
-  if (!classId) return;
-  const { data } = await sb.from('class_exams').select('*, subjects(name_ar,name_fr)').eq('class_id', classId).gte('exam_at', new Date().toISOString()).order('exam_at').limit(1);
-  const exam = data && data[0]; if (!exam) return;
-  const date = new Date(exam.exam_at), days = Math.max(0, Math.ceil((date - new Date()) / 86400000));
-  const daysEl = document.getElementById('countdown-days-val'), infoEl = document.querySelector('.countdown-info p');
-  if (daysEl) daysEl.textContent = days;
-  if (infoEl) infoEl.innerHTML = `<i class="fa-solid fa-calendar-check"></i> ${exam.title || (currentLanguage === 'ar' ? exam.subjects?.name_ar : exam.subjects?.name_fr) || 'اختبار'} — ${date.toLocaleString('ar-MA')}`;
+  const daysEl = document.getElementById('countdown-days-val');
+  const lblEl = document.querySelector('.countdown-lbl');
+  const listEl = document.getElementById('upcoming-exams-list');
+  if (!classId || !listEl) return;
+
+  const { data } = await sb.from('class_exams').select('*, subjects(name_ar,name_fr)').eq('class_id', classId).gte('exam_at', new Date().toISOString()).order('exam_at').limit(6);
+  const exams = data || [];
+  const locale = currentLanguage === 'ar' ? 'ar-MA' : 'fr-FR';
+  const emptyMsg = TRANSLATIONS[currentLanguage]?.no_exams_scheduled || 'لم تتم برمجة أي مواعيد اختبارات لقسمك بعد.';
+
+  if (!exams.length) {
+    if (daysEl) daysEl.textContent = '--';
+    if (lblEl) lblEl.textContent = TRANSLATIONS[currentLanguage]?.days_remaining || 'يوم متبقي عن أقرب اختبار';
+    listEl.innerHTML = `<p class="empty-notif">${emptyMsg}</p>`;
+    return;
+  }
+
+  // Hero countdown reflects the nearest upcoming exam
+  const nextExam = exams[0];
+  const nextDays = Math.max(0, Math.ceil((new Date(nextExam.exam_at) - new Date()) / 86400000));
+  if (daysEl) daysEl.textContent = nextDays;
+  if (lblEl) lblEl.textContent = TRANSLATIONS[currentLanguage]?.days_remaining || 'يوم متبقي عن أقرب اختبار';
+
+  // Full list of scheduled exam dates for the class
+  listEl.innerHTML = exams.map(exam => {
+    const date = new Date(exam.exam_at);
+    const days = Math.max(0, Math.ceil((date - new Date()) / 86400000));
+    const subjectName = (currentLanguage === 'ar' ? exam.subjects?.name_ar : exam.subjects?.name_fr) || '';
+    const label = exam.title || subjectName || (currentLanguage === 'ar' ? 'اختبار' : 'Examen');
+    const urgency = days <= 2 ? 'danger' : (days <= 7 ? 'warning' : 'accent');
+    const unit = currentLanguage === 'ar' ? 'ي' : 'j';
+    return `<div class="upcoming-exam-item">
+      <div class="upcoming-exam-info">
+        <strong>${label}</strong>
+        ${subjectName && exam.title ? `<small>${subjectName}</small>` : ''}
+        <small><i class="fa-regular fa-calendar"></i> ${date.toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })}</small>
+      </div>
+      <span class="exam-days-badge badge-${urgency}">${days}${unit}</span>
+    </div>`;
+  }).join('');
 }
 async function loadStudentTimetable(classId) {
   if (!classId) return;
@@ -1312,8 +1345,15 @@ async function populateTeacherExamSelects(schedule) {
 async function loadTeacherExams() {
   const list = document.getElementById('teacher-exams-list'); if (!list) return;
   const { data } = await sb.from('class_exams').select('*, classes(name), subjects(name_ar,name_fr)').eq('teacher_id', currentUser.id).order('exam_at', { ascending: false }).limit(8);
-  list.innerHTML = (data || []).map(e => `<div class="admin-announcement-item"><div><strong>${e.title || (currentLanguage === 'ar' ? e.subjects?.name_ar : e.subjects?.name_fr)}</strong><small>${e.classes?.name || ''} · ${new Date(e.exam_at).toLocaleString('ar-MA')}</small></div></div>`).join('') || '<p class="empty-notif">لم يتم نشر مواعيد اختبارات بعد.</p>';
+  list.innerHTML = (data || []).map(e => `<div class="admin-announcement-item"><div><strong>${e.title || (currentLanguage === 'ar' ? e.subjects?.name_ar : e.subjects?.name_fr)}</strong><small>${e.classes?.name || ''} · ${new Date(e.exam_at).toLocaleString('ar-MA')}</small></div><button class="btn btn-danger btn-sm" onclick="deleteExam(${e.id})" title="حذف الموعد"><i class="fa-solid fa-trash"></i> حذف</button></div>`).join('') || '<p class="empty-notif">لم يتم نشر مواعيد اختبارات بعد.</p>';
 }
+window.deleteExam = async (id) => {
+  if (!confirm('هل تريد حذف موعد هذا الاختبار نهائياً؟ سيختفي فوراً من واجهة التلاميذ.')) return;
+  const { error } = await sb.from('class_exams').delete().eq('id', id);
+  if (error) return showToast(error.message, 'danger');
+  showToast('تم حذف موعد الاختبار', 'success');
+  await loadTeacherExams();
+};
 const teacherExamForm = document.getElementById('teacher-exam-form');
 if (teacherExamForm) teacherExamForm.onsubmit = async (e) => {
   e.preventDefault();
@@ -2856,11 +2896,3 @@ document.addEventListener('DOMContentLoaded', () => {
   // Ensure loader is immediately dismissed
   document.body.classList.remove('loading-state');
 });
-
-
-
-
-
-
-
-
