@@ -895,11 +895,33 @@ async function loadStudentDashboard() {
   
   // 5. Load Absences logs
   loadStudentAbsences(currentUser.id);
+  loadStudentNotifications();
+  loadStudentExams(userProfile.class_id);
   
   // 6. Next Session Calculator widget
   initNextClassWidget(userProfile.class_id);
 }
 
+async function loadStudentNotifications() {
+  const container = document.getElementById('student-notifications-list'); if (!container) return;
+  const { data, error } = await sb.from('notifications').select('*').or(`recipient_id.is.null,recipient_id.eq.${currentUser.id}`).order('created_at', { ascending: false }).limit(12);
+  if (error) { container.innerHTML = '<p class="empty-notif">تعذر تحميل الإشعارات حالياً.</p>'; return; }
+  container.innerHTML = (data || []).map(n => {
+    const title = currentLanguage === 'ar' ? n.title : (n.title_fr || n.title);
+    const message = currentLanguage === 'ar' ? n.message : (n.message_fr || n.message);
+    const attachment = n.media_url ? `<a class="notification-attachment" href="${n.media_url}" target="_blank"><i class="fa-solid fa-paperclip"></i> المرفق</a>` : '';
+    return `<article class="student-notification-card"><div class="notification-icon"><i class="fa-solid fa-bullhorn"></i></div><div><div class="notification-meta">${new Date(n.created_at).toLocaleDateString('ar-MA')}</div><h4>${title}</h4><p>${message}</p>${attachment}</div></article>`;
+  }).join('') || '<p class="empty-notif">لا توجد إشعارات جديدة حالياً.</p>';
+}
+async function loadStudentExams(classId) {
+  if (!classId) return;
+  const { data } = await sb.from('class_exams').select('*, subjects(name_ar,name_fr)').eq('class_id', classId).gte('exam_at', new Date().toISOString()).order('exam_at').limit(1);
+  const exam = data && data[0]; if (!exam) return;
+  const date = new Date(exam.exam_at), days = Math.max(0, Math.ceil((date - new Date()) / 86400000));
+  const daysEl = document.getElementById('countdown-days-val'), infoEl = document.querySelector('.countdown-info p');
+  if (daysEl) daysEl.textContent = days;
+  if (infoEl) infoEl.innerHTML = `<i class="fa-solid fa-calendar-check"></i> ${exam.title || (currentLanguage === 'ar' ? exam.subjects?.name_ar : exam.subjects?.name_fr) || 'اختبار'} — ${date.toLocaleString('ar-MA')}`;
+}
 async function loadStudentTimetable(classId) {
   if (!classId) return;
   const { data: slots, error } = await sb
@@ -1199,6 +1221,8 @@ async function loadTeacherDashboard() {
   
   // Populate select boxes in forms
   populateTeacherSelects(schedule);
+  populateTeacherExamSelects(schedule);
+  loadTeacherExams();
 }
 
 async function populateTeacherSelects(schedule) {
@@ -1276,6 +1300,28 @@ async function populateTeacherSelects(schedule) {
   }
 }
 
+async function populateTeacherExamSelects(schedule) {
+  const classSelect = document.getElementById('exam-class-select'), subjectSelect = document.getElementById('exam-subject-select');
+  if (!classSelect || !subjectSelect) return;
+  const classes = new Map(), subjects = new Map();
+  (schedule || []).forEach(s => { if (s.classes) classes.set(s.class_id, s.classes.name); if (s.subjects) subjects.set(s.subject_id, currentLanguage === 'ar' ? s.subjects.name_ar : s.subjects.name_fr); });
+  classSelect.innerHTML = '<option value="">-- اختر القسم --</option>'; subjectSelect.innerHTML = '<option value="">-- اختر المادة --</option>';
+  classes.forEach((name,id) => classSelect.innerHTML += `<option value="${id}">${name}</option>`);
+  subjects.forEach((name,id) => subjectSelect.innerHTML += `<option value="${id}">${name}</option>`);
+}
+async function loadTeacherExams() {
+  const list = document.getElementById('teacher-exams-list'); if (!list) return;
+  const { data } = await sb.from('class_exams').select('*, classes(name), subjects(name_ar,name_fr)').eq('teacher_id', currentUser.id).order('exam_at', { ascending: false }).limit(8);
+  list.innerHTML = (data || []).map(e => `<div class="admin-announcement-item"><div><strong>${e.title || (currentLanguage === 'ar' ? e.subjects?.name_ar : e.subjects?.name_fr)}</strong><small>${e.classes?.name || ''} · ${new Date(e.exam_at).toLocaleString('ar-MA')}</small></div></div>`).join('') || '<p class="empty-notif">لم يتم نشر مواعيد اختبارات بعد.</p>';
+}
+const teacherExamForm = document.getElementById('teacher-exam-form');
+if (teacherExamForm) teacherExamForm.onsubmit = async (e) => {
+  e.preventDefault();
+  const payload = { class_id: Number(document.getElementById('exam-class-select').value), subject_id: Number(document.getElementById('exam-subject-select').value), exam_at: new Date(document.getElementById('exam-date').value).toISOString(), title: document.getElementById('exam-title').value.trim() || null, teacher_id: currentUser.id };
+  const { error } = await sb.from('class_exams').insert(payload);
+  if (error) return showToast(error.message, 'danger');
+  showToast('تم نشر موعد الاختبار للتلاميذ.', 'success'); teacherExamForm.reset(); await loadTeacherExams();
+};
 // Attendance List loading
 document.getElementById('teach-load-students-btn').onclick = async () => {
   const sessionSelect = document.getElementById('teach-attend-session-select');
@@ -1977,6 +2023,7 @@ async function loadAdminUsersList() {
       tbody.appendChild(row);
     });
     
+    bindAdminUsersSearch();
     // Attach change event listeners to role switcher dropdowns
     document.querySelectorAll('.role-changer-select').forEach(sel => {
       sel.onchange = async (e) => {
@@ -1988,6 +2035,13 @@ async function loadAdminUsersList() {
   }
 }
 
+function bindAdminUsersSearch() {
+  const input = document.getElementById('admin-users-search'); if (!input || input.dataset.bound) return;
+  input.dataset.bound = 'true'; input.oninput = () => {
+    const term = input.value.trim().toLocaleLowerCase();
+    document.querySelectorAll('#admin-users-table-body tr').forEach(row => row.classList.toggle('hidden', term && !row.textContent.toLocaleLowerCase().includes(term)));
+  };
+}
 async function updateUserRole(uid, newRole) {
   try {
     const { error } = await sb
@@ -2703,6 +2757,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'teach-tab-attendance': 'teacher-attendance-section',
     'teach-tab-files': 'teacher-files-section',
     'teach-tab-summons': 'teacher-summons-section',
+    'teach-tab-exams': 'teacher-exams-section',
     'teach-tab-req': 'teacher-req-section'
   };
   Object.keys(teachTabs).forEach(tabId => {
@@ -2801,6 +2856,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Ensure loader is immediately dismissed
   document.body.classList.remove('loading-state');
 });
+
 
 
 
