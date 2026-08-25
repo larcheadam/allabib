@@ -178,12 +178,19 @@ body:not(.loading-state) #loader-wrapper {
   left: 0;
   width: 100%;
   height: var(--header-height);
-  background-color: var(--card-bg);
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
   z-index: 100;
   display: flex;
   align-items: center;
   transition: background-color var(--transition-normal), border-color var(--transition-normal);
+}
+
+body.dark-mode .app-header {
+  background-color: rgba(30, 41, 59, 0.85);
 }
 
 .header-container {
@@ -476,11 +483,16 @@ html[lang="fr"] .menu-item {
   border-radius: 16px;
   padding: 1.5rem;
   box-shadow: var(--shadow-md);
-  transition: box-shadow var(--transition-normal), border-color var(--transition-normal);
+  transition: box-shadow var(--transition-normal), border-color var(--transition-normal), transform var(--transition-normal);
 }
 
 .card:hover {
   box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+.modal-content.card:hover {
+  transform: none;
 }
 
 .card-header {
@@ -684,24 +696,34 @@ html[lang="fr"] .input-icon-wrapper input {
   font-size: 0.95rem;
   font-family: inherit;
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast), filter var(--transition-fast);
   border: none;
 }
 
+.btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
 .btn-primary {
-  background-color: var(--primary-color);
+  background: linear-gradient(135deg, var(--primary-color), #17306e);
   color: #FFFFFF;
+  box-shadow: 0 4px 12px -4px rgba(30, 58, 138, 0.5);
 }
 .btn-primary:hover {
-  background-color: #1e40af;
+  filter: brightness(1.1);
+  box-shadow: 0 6px 16px -4px rgba(30, 58, 138, 0.55);
+  transform: translateY(-1px);
 }
 
 .btn-accent {
-  background-color: var(--accent-color);
+  background: linear-gradient(135deg, var(--accent-color), #0284c7);
   color: #FFFFFF;
+  box-shadow: 0 4px 12px -4px rgba(14, 165, 233, 0.5);
 }
 .btn-accent:hover {
-  background-color: #0284c7;
+  filter: brightness(1.08);
+  box-shadow: 0 6px 16px -4px rgba(14, 165, 233, 0.55);
+  transform: translateY(-1px);
 }
 
 .btn-secondary {
@@ -711,6 +733,7 @@ html[lang="fr"] .input-icon-wrapper input {
 }
 .btn-secondary:hover {
   background-color: var(--border-color);
+  transform: translateY(-1px);
 }
 
 .btn-warning {
@@ -719,6 +742,7 @@ html[lang="fr"] .input-icon-wrapper input {
 }
 .btn-warning:hover {
   background-color: #d97706;
+  transform: translateY(-1px);
 }
 
 .btn-success {
@@ -727,6 +751,11 @@ html[lang="fr"] .input-icon-wrapper input {
 }
 .btn-success:hover {
   background-color: #059669;
+  transform: translateY(-1px);
+}
+
+.btn-danger:hover {
+  transform: translateY(-1px);
 }
 
 .btn-sm {
@@ -999,31 +1028,106 @@ html[lang="fr"] .table th, html[lang="fr"] .table td {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .countdown-widget {
-  margin: 1.5rem 0;
+  margin: 1.25rem 0;
+  position: relative;
 }
 
 .countdown-days {
-  font-size: 3rem;
+  font-size: 3.25rem;
   font-weight: 900;
-  color: var(--accent-color);
   line-height: 1;
+  background: linear-gradient(135deg, var(--accent-color), var(--primary-color));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: countdownPop 0.4s ease;
+}
+
+@keyframes countdownPop {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .countdown-lbl {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-muted);
-  margin-top: 0.25rem;
+  margin-top: 0.35rem;
 }
 
 .countdown-info {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+
+/* Upcoming scheduled exams list */
+.upcoming-exams-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  text-align: start;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-inline-end: 0.25rem;
+}
+
+.upcoming-exam-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--bg-color);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+}
+
+.upcoming-exam-item:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-sm);
+  border-color: var(--accent-color);
+}
+
+.upcoming-exam-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.upcoming-exam-info strong {
+  font-size: 0.92rem;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upcoming-exam-info small {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.exam-days-badge {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 800;
+  padding: 0.3rem 0.65rem;
+  border-radius: 999px;
+  color: #FFFFFF;
+  min-width: 2.5rem;
+  text-align: center;
+}
+
+.exam-days-badge.badge-danger { background: var(--danger-color); }
+.exam-days-badge.badge-warning { background: var(--warning-color); }
+.exam-days-badge.badge-accent { background: var(--accent-color); }
 
 /* 13. Teacher view controls & Tab navigation */
 .teacher-tab-navigation {
