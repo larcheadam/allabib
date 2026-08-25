@@ -1698,3 +1698,21 @@ html[lang="fr"] .toast.toast-warning { border-left-color: var(--warning-color); 
 .card, .card-nested { border-radius: 16px; }
 .form-control:focus { border-color: var(--accent-color); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 16%, transparent); }
 @media (max-width: 768px) { .bulk-import-controls, .admin-announcement-item { flex-direction: column; align-items: stretch; } }
+
+/* Student experience and academic planning */
+#view-student { max-width: 1280px; margin-inline: auto; }
+#view-student .dashboard-header { background: radial-gradient(circle at top right, rgba(14,165,233,.18), transparent 32%), linear-gradient(120deg, var(--card-bg), color-mix(in srgb, var(--accent-color) 7%, var(--card-bg))); border: 1px solid color-mix(in srgb, var(--accent-color) 18%, var(--border-color)); }
+.student-notifications-panel { overflow: hidden; border-top: 4px solid var(--accent-color); }
+.section-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding-bottom:1rem; border-bottom:1px solid var(--border-color); }
+.section-heading h3 { margin: .15rem 0 0; font-size:1.15rem; }
+.eyebrow { color:var(--accent-color); font-size:.76rem; font-weight:800; letter-spacing:.04em; }
+.notification-status { font-size:.8rem; color:var(--success-color); background:color-mix(in srgb, var(--success-color) 10%, transparent); padding:.45rem .7rem; border-radius:999px; white-space:nowrap; }
+.notification-status i { font-size:.5rem; vertical-align:middle; }
+.student-notifications-list { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.85rem; margin-top:1rem; }
+.student-notification-card { display:flex; gap:.85rem; padding:1rem; background:color-mix(in srgb, var(--accent-color) 5%, var(--card-bg)); border:1px solid color-mix(in srgb, var(--accent-color) 14%, var(--border-color)); border-radius:14px; transition:transform .2s ease, box-shadow .2s ease; }
+.student-notification-card:hover { transform:translateY(-3px); box-shadow:var(--shadow-md); }
+.notification-icon { flex:0 0 38px; height:38px; border-radius:12px; display:grid; place-items:center; color:var(--accent-color); background:color-mix(in srgb, var(--accent-color) 13%, transparent); }
+.student-notification-card h4 { margin:.15rem 0; font-size:.95rem; }.student-notification-card p { margin:0; color:var(--text-muted); font-size:.86rem; line-height:1.7; }.notification-meta { color:var(--text-muted); font-size:.72rem; }.notification-attachment { display:inline-block; margin-top:.6rem; font-size:.82rem; font-weight:700; }
+.user-search-wrap { position:relative; margin:1rem 0; }.user-search-wrap i { position:absolute; inset-inline-start:1rem; top:50%; transform:translateY(-50%); color:var(--text-muted); }.user-search-wrap input { padding-inline-start:2.6rem; }
+.teacher-tab-navigation { flex-wrap:wrap; }.teacher-tab-navigation .btn { border-radius:10px; }
+@media (max-width:768px) { .student-notifications-list { grid-template-columns:1fr; }.section-heading { align-items:flex-start; flex-direction:column; }.notification-status { white-space:normal; } }
