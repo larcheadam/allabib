@@ -430,6 +430,7 @@ GRANT ALL ON TABLE public.profiles TO postgres, service_role, authenticated;
 
 -- ??????? ????????? ???????? (???? ??? ????? ?? Supabase SQL Editor ??? ???????)
 DROP POLICY IF EXISTS "Summons insertable and updatable by admin" ON parent_summons;
+DROP POLICY IF EXISTS "Summons managed by admin or teacher" ON parent_summons;
 CREATE POLICY "Summons managed by admin or teacher" ON parent_summons
     FOR ALL USING (get_user_role() IN ('admin', 'teacher'))
     WITH CHECK (get_user_role() IN ('admin', 'teacher'));
@@ -460,6 +461,10 @@ ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS video_url TEXT;
 
 -- Restrict resource deletion/management to admins; teachers keep only insertion/upload access.
 DROP POLICY IF EXISTS "Resources managed by admin or teachers" ON resources;
+DROP POLICY IF EXISTS "Resources readable by permitted users" ON resources;
+DROP POLICY IF EXISTS "Resources inserted by teachers or admins" ON resources;
+DROP POLICY IF EXISTS "Resources updated or deleted by admins" ON resources;
+DROP POLICY IF EXISTS "Resources deleted by admins" ON resources;
 CREATE POLICY "Resources readable by permitted users" ON resources
   FOR SELECT USING (get_user_role() IN ('admin', 'teacher') OR class_id = (SELECT class_id FROM profiles WHERE id = auth.uid()));
 CREATE POLICY "Resources inserted by teachers or admins" ON resources
@@ -468,3 +473,21 @@ CREATE POLICY "Resources updated or deleted by admins" ON resources
   FOR UPDATE USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
 CREATE POLICY "Resources deleted by admins" ON resources
   FOR DELETE USING (get_user_role() = 'admin');
+
+-- ?????? ?????????? ???? ?????? ??????? ???????.
+CREATE TABLE IF NOT EXISTS public.class_exams (
+  id SERIAL PRIMARY KEY,
+  class_id INT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+  subject_id INT REFERENCES public.subjects(id) ON DELETE SET NULL,
+  teacher_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  title VARCHAR(200),
+  exam_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+ALTER TABLE public.class_exams ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Exams readable by their class and staff" ON public.class_exams;
+DROP POLICY IF EXISTS "Exams publishable by teachers and admins" ON public.class_exams;
+DROP POLICY IF EXISTS "Exams manageable by creator or admin" ON public.class_exams;
+CREATE POLICY "Exams readable by their class and staff" ON public.class_exams FOR SELECT USING (get_user_role() IN ('admin','teacher') OR class_id = (SELECT class_id FROM public.profiles WHERE id = auth.uid()));
+CREATE POLICY "Exams publishable by teachers and admins" ON public.class_exams FOR INSERT WITH CHECK (get_user_role() IN ('admin','teacher') AND teacher_id = auth.uid());
+CREATE POLICY "Exams manageable by creator or admin" ON public.class_exams FOR ALL USING (get_user_role() = 'admin' OR teacher_id = auth.uid()) WITH CHECK (get_user_role() = 'admin' OR teacher_id = auth.uid());
