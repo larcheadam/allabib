@@ -427,3 +427,44 @@ GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 GRANT ALL ON TABLE public.profiles TO postgres, service_role, authenticated;
 
 
+
+-- ??????? ????????? ???????? (???? ??? ????? ?? Supabase SQL Editor ??? ???????)
+DROP POLICY IF EXISTS "Summons insertable and updatable by admin" ON parent_summons;
+CREATE POLICY "Summons managed by admin or teacher" ON parent_summons
+    FOR ALL USING (get_user_role() IN ('admin', 'teacher'))
+    WITH CHECK (get_user_role() IN ('admin', 'teacher'));
+
+-- ????? ?????? ?? ??? ???? Auth ????? ?????? ?????? ???? ?? ???????.
+CREATE OR REPLACE FUNCTION public.admin_delete_user(target_user_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+BEGIN
+  IF public.get_user_role() <> 'admin' THEN
+    RAISE EXCEPTION 'Admin privileges required';
+  END IF;
+  IF target_user_id = auth.uid() THEN
+    RAISE EXCEPTION 'You cannot delete your own active account';
+  END IF;
+  DELETE FROM auth.users WHERE id = target_user_id;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.admin_delete_user(UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.admin_delete_user(UUID) TO authenticated;
+
+-- Supports optional media attached to announcements created before this update.
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS media_url TEXT;
+ALTER TABLE public.notifications ADD COLUMN IF NOT EXISTS video_url TEXT;
+
+-- Restrict resource deletion/management to admins; teachers keep only insertion/upload access.
+DROP POLICY IF EXISTS "Resources managed by admin or teachers" ON resources;
+CREATE POLICY "Resources readable by permitted users" ON resources
+  FOR SELECT USING (get_user_role() IN ('admin', 'teacher') OR class_id = (SELECT class_id FROM profiles WHERE id = auth.uid()));
+CREATE POLICY "Resources inserted by teachers or admins" ON resources
+  FOR INSERT WITH CHECK (get_user_role() IN ('admin', 'teacher'));
+CREATE POLICY "Resources updated or deleted by admins" ON resources
+  FOR UPDATE USING (get_user_role() = 'admin') WITH CHECK (get_user_role() = 'admin');
+CREATE POLICY "Resources deleted by admins" ON resources
+  FOR DELETE USING (get_user_role() = 'admin');
