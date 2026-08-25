@@ -231,7 +231,7 @@ const TRANSLATIONS = {
     stat_secure: "Accès Sécurisé",
     login_tab_pass: "Connexion par Email",
     login_tab_qr: "Connexion par QR Code",
-    login_title: "Connexion à la Plateforme",
+    login_title: "Connexion �  la Plateforme",
     email_label: "Adresse Email",
     password_label: "Mot de passe",
     btn_login: "Se connecter",
@@ -246,7 +246,7 @@ const TRANSLATIONS = {
     next_class_title: "Séance en cours & suivante",
     no_current_class: "Aucune séance planifiée actuellement.",
     my_qr_card: "Carte d'identité numérique",
-    qr_usage_desc: "Présentez ce code à l'entrée de l'établissement ou lors de l'enregistrement de présence.",
+    qr_usage_desc: "Présentez ce code �  l'entrée de l'établissement ou lors de l'enregistrement de présence.",
     download: "Télécharger",
     my_timetable: "Emploi du temps de la classe",
     time_slots: "Séances",
@@ -262,7 +262,7 @@ const TRANSLATIONS = {
     date: "Date",
     status: "Statut",
     justification: "Justificatif",
-    exam_countdown: "Compte à rebours des examens",
+    exam_countdown: "Compte �  rebours des examens",
     days_remaining: "jours restants avant l'examen national",
     exam_date_notice: "L'examen national unifié est prévu pour Juin 2027.",
 
@@ -289,7 +289,7 @@ const TRANSLATIONS = {
     btn_share_resource: "Publier la ressource",
     sub_request_title: "Déclarer une absence ou demander un remplacement",
     sub_request_desc: "Remplissez ce formulaire pour informer l'administration de tout changement planifié afin qu'elle puisse réassigner la séance et avertir les élèves.",
-    select_slot_to_modify: "Choisir la séance à modifier",
+    select_slot_to_modify: "Choisir la séance �  modifier",
     modification_date: "Date de modification",
     modification_type: "Type de modification",
     opt_cancel: "Annuler complètement la séance",
@@ -860,12 +860,13 @@ async function loadStudentDashboard() {
   };
   
   // 2. Check for Parent Summons (استدعاء ولي الأمر)
-  const { data: summons } = await sb
+  const { data: summons, error: summonsError } = await sb
     .from('parent_summons')
     .select('*')
     .eq('student_id', currentUser.id)
     .eq('status', 'pending');
     
+  if (summonsError) console.error('Student summons error:', summonsError);
   const summonsAlert = document.getElementById('student-summons-alert');
   if (summons && summons.length > 0) {
     summonsAlert.classList.remove('hidden');
@@ -1167,7 +1168,7 @@ function initNextClassWidget(classId) {
         <div class="upcoming-session-box p-3 bg-light border rounded">
           <h5>${currentLanguage === 'ar' ? 'الحصة القادمة:' : 'Séance suivante:'} <strong>${subj}</strong></h5>
           <p>${currentLanguage === 'ar' ? 'القاعة:' : 'Salle:'} ${upcoming.room_number || ''} | أستاذ ${upcoming.profiles ? upcoming.profiles.name : ''}</p>
-          <small>${upcoming.start_time.substring(0, 5)} (${currentLanguage === 'ar' ? 'تبدأ في' : 'commence à'} ${upcoming.start_time.substring(0, 5)})</small>
+          <small>${upcoming.start_time.substring(0, 5)} (${currentLanguage === 'ar' ? 'تبدأ في' : 'commence � '} ${upcoming.start_time.substring(0, 5)})</small>
         </div>
       `;
     } else {
@@ -1480,6 +1481,7 @@ if (teachSumForm) {
     if (!error) {
       showToast(currentLanguage === 'ar' ? "تم إصدار وتأكيد استدعاء ولي الأمر بنجاح!" : "Summons issued successfully!", "success");
       teachSumForm.reset();
+      await loadAdminSummonsLogs();
     } else {
       showToast(error.message, "danger");
     }
@@ -1522,6 +1524,8 @@ async function loadAdminDashboard() {
   await loadAdminUsersList();
   await loadAdminAbsencesList();
   await loadAdminSummonsLogs();
+  await loadAdminAnnouncements();
+  await loadAdminMedia();
   await loadHolidayList();
   await loadSubstitutionsLogs();
   await loadContactDirectory();
@@ -1763,7 +1767,7 @@ document.getElementById('admin-subject-form').onsubmit = async (e) => {
   e.preventDefault();
   const levelId = document.getElementById('sub-level-select').value;
   const name = document.getElementById('subj-name').value.trim();
-  const coeff = document.getElementById('subj-coeff').value;
+  const coeff = 1;
   
   const { error } = await sb.from('subjects').insert({
     level_id: levelId,
@@ -1842,6 +1846,30 @@ async function triggerAdminScheduleView(classId) {
   renderTimetableGrid(slots || [], 'admin-timetable-grid-body');
 }
 
+async function createStudentFromImport({ name, email, password, classId, phone }) {
+  const authBuilder = _supabaseLib.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } });
+  const { data, error } = await authBuilder.auth.signUp({ email, password, options: { data: { name, full_name: name, role: 'student' } } });
+  if (error) throw error;
+  if (!data || !data.user) throw new Error('تعذر إنشاء حساب التلميذ');
+  const { error: profileError } = await sb.from('profiles').upsert({ id: data.user.id, name, email, role: 'student', class_id: classId, phone_number: phone || null, qr_code_token: `allabib_auth:${email}:${password}` });
+  if (profileError) throw profileError;
+}
+function importValue(row, names) { const key = Object.keys(row).find(k => names.includes(String(k).trim().toLowerCase())); return key === undefined ? '' : String(row[key] || '').trim(); }
+async function importStudentsFile(file) {
+  if (!file) throw new Error('يرجى اختيار ملف أولاً');
+  if (!window.XLSX) throw new Error('مكتبة قراءة Excel غير متاحة، يرجى إعادة تحميل الصفحة');
+  const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' });
+  if (!rows.length) throw new Error('الملف لا يحتوي على بيانات');
+  const { data: classes, error } = await sb.from('classes').select('id, name'); if (error) throw error;
+  const result = { success: 0, failed: [] };
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i], name = importValue(row, ['name','full_name','الاسم','الاسم الكامل']), email = importValue(row, ['email','البريد','البريد الإلكتروني']), password = importValue(row, ['password','كلمة المرور']) || 'Allabib2027!', className = importValue(row, ['class','class_name','القسم']), phone = importValue(row, ['phone','phone_number','الهاتف']);
+    const classItem = (classes || []).find(c => c.name.trim().toLowerCase() === className.toLowerCase());
+    try { if (!name || !email || !classItem) throw new Error(!classItem ? 'القسم غير موجود' : 'الاسم والبريد مطلوبان'); await createStudentFromImport({ name, email, password, classId: classItem.id, phone }); result.success++; }
+    catch (err) { result.failed.push(`السطر ${i + 2}: ${err.message}`); }
+  } return result;
+}
 // User accounts creator (Initiates full Supabase Auth Lifecycle & enriches profile)
 document.getElementById('admin-user-create-form').onsubmit = async (e) => {
   e.preventDefault();
@@ -1943,7 +1971,8 @@ async function loadAdminUsersList() {
           <button class="btn btn-secondary btn-sm" onclick="showQrModal('${u.name}', '${u.role}', '${className}', '${u.qr_code_token || ''}')">
             <i class="fa-solid fa-qrcode"></i> QR
           </button>
-        </td>
+        <button class="btn btn-danger btn-sm" onclick="deleteUserAccount(\x27${u.id}\x27)" title="حذف الحساب"><i class="fa-solid fa-trash"></i></button>
+          </td>
       `;
       tbody.appendChild(row);
     });
@@ -2014,6 +2043,36 @@ document.getElementById('btn-print-qr-card').onclick = () => {
   window.print();
 };
 
+window.deleteUserAccount = async (uid) => {
+  if (!confirm('هل تريد حذف هذا الحساب نهائياً؟')) return;
+  const { error } = await sb.rpc('admin_delete_user', { target_user_id: uid });
+  if (error) return showToast(error.message, 'danger');
+  showToast('تم حذف الحساب', 'success'); await loadAdminUsersList();
+};
+async function loadAdminAnnouncements() {
+  const list = document.getElementById('admin-announcements-list'); if (!list) return;
+  const { data, error } = await sb.from('notifications').select('*').is('recipient_id', null).order('created_at', { ascending: false });
+  if (error) { list.textContent = error.message; return; }
+  list.innerHTML = (data || []).map(n => `<div class="admin-announcement-item"><div><strong>${n.title}</strong><small>${new Date(n.created_at).toLocaleDateString()}</small></div><button class="btn btn-danger btn-sm" onclick="deleteAnnouncement(${n.id})"><i class="fa-solid fa-trash"></i> حذف</button></div>`).join('') || '<p class="empty-notif">لا توجد إعلانات منشورة.</p>';
+}
+async function loadAdminMedia() {
+  const list = document.getElementById('admin-media-list'); if (!list) return;
+  const { data, error } = await sb.from('resources').select('id,title,file_url,created_at').order('created_at', { ascending: false });
+  if (error) { list.textContent = error.message; return; }
+  list.innerHTML = (data || []).map(r => `<div class="admin-announcement-item"><div><strong>${r.title}</strong><small>${new Date(r.created_at).toLocaleDateString()}</small></div><span><a class="btn btn-secondary btn-sm" href="${r.file_url}" target="_blank">عرض</a> <button class="btn btn-danger btn-sm" onclick="deleteMediaResource(${r.id})"><i class="fa-solid fa-trash"></i> حذف</button></span></div>`).join('') || '<p class="empty-notif">لا توجد وسائط مرفوعة.</p>';
+}
+window.deleteMediaResource = async (id) => {
+  if (!confirm('هل تريد حذف هذا المورد من النظام؟')) return;
+  const { error } = await sb.from('resources').delete().eq('id', id);
+  if (error) return showToast(error.message, 'danger');
+  showToast('تم حذف المورد', 'success'); await loadAdminMedia();
+};
+window.deleteAnnouncement = async (id) => {
+  if (!confirm('هل تريد حذف الإعلان من سجل النظام؟')) return;
+  const { error } = await sb.from('notifications').delete().eq('id', id);
+  if (error) return showToast(error.message, 'danger');
+  showToast('تم حذف الإعلان', 'success'); await loadAdminAnnouncements();
+};
 // ABSENCES AND SUMMONS
 async function loadAdminAbsencesList() {
   const { data: list } = await sb
@@ -2077,13 +2136,14 @@ document.getElementById('admin-summons-form').onsubmit = async (e) => {
     showToast(currentLanguage === 'ar' ? "تم إرسال الاستدعاء بنجاح للتلميذ" : "Summons issued successfully", "success");
     document.getElementById('admin-summons-form').reset();
     await loadAdminSummonsLogs();
+    await loadStudentDashboard();
   } else {
     showToast(error.message, "danger");
   }
 };
 
 async function loadAdminSummonsLogs() {
-  const { data: summons } = await sb
+  const { data: summons, error: summonsError } = await sb
     .from('parent_summons')
     .select('*, profiles(*)')
     .order('created_at', { ascending: false });
@@ -2128,7 +2188,7 @@ document.getElementById('admin-announcement-form').onsubmit = async (e) => {
   try {
     let mediaUrl = null;
     if (file) {
-      const uploadRes = await uploadToCloudinary(file, 'auto');
+      const uploadRes = await uploadToCloudinary(file, file.type.startsWith('image/') ? 'image' : 'raw');
       mediaUrl = uploadRes.url;
     }
     
@@ -2691,6 +2751,14 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
 
+  const bulkImportButton = document.getElementById('bulk-users-import-btn');
+  if (bulkImportButton) bulkImportButton.onclick = async () => {
+    const resultEl = document.getElementById('bulk-users-result');
+    bulkImportButton.disabled = true; resultEl.textContent = 'جارٍ استيراد الحسابات…';
+    try { const result = await importStudentsFile(document.getElementById('bulk-users-file').files[0]); resultEl.textContent = `تم إنشاء ${result.success} حساباً.${result.failed.length ? ' تعذر: ' + result.failed.join(' | ') : ''}`; await loadAdminUsersList(); }
+    catch (err) { resultEl.textContent = err.message; showToast(err.message, 'danger'); }
+    finally { bulkImportButton.disabled = false; }
+  };
   // Optional PWA Installation Prompt (Purely optional step for users)
   let deferredInstallPrompt = null;
   window.addEventListener('beforeinstallprompt', (e) => {
@@ -2733,3 +2801,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // Ensure loader is immediately dismissed
   document.body.classList.remove('loading-state');
 });
+
+
+
+
+
+
+
