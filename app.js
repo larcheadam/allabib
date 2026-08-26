@@ -896,7 +896,6 @@ async function loadStudentDashboard() {
   // 5. Load Absences logs
   loadStudentAbsences(currentUser.id);
   loadStudentNotifications();
-  loadStudentExams(userProfile.class_id);
   
   // 6. Next Session Calculator widget
   initNextClassWidget(userProfile.class_id);
@@ -1279,8 +1278,6 @@ async function loadTeacherDashboard() {
   
   // Populate select boxes in forms
   populateTeacherSelects(schedule);
-  populateTeacherExamSelects(schedule);
-  loadTeacherExams();
 }
 
 async function populateTeacherSelects(schedule) {
@@ -2830,31 +2827,68 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('login-pass-section').classList.remove('active');
   };
   
-  // Start QR Camera login button click
-  document.getElementById('start-qr-btn').onclick = () => {
+  // Start QR Camera login button click with full multi-camera fallback
+  document.getElementById('start-qr-btn').onclick = async () => {
+    const startBtn = document.getElementById('start-qr-btn');
     if (activeQrScanner) {
-      activeQrScanner.stop();
+      try {
+        await activeQrScanner.stop();
+        activeQrScanner.clear();
+      } catch (e) {
+        console.warn("QR stop warning:", e);
+      }
       activeQrScanner = null;
-      document.getElementById('start-qr-btn').innerHTML = `<i class="fa-solid fa-camera"></i> <span>${TRANSLATIONS[currentLanguage].start_camera}</span>`;
+      startBtn.innerHTML = `<i class="fa-solid fa-camera"></i> <span>${TRANSLATIONS[currentLanguage].start_camera}</span>`;
       return;
     }
     
-    activeQrScanner = new Html5Qrcode("qr-reader");
-    activeQrScanner.start(
-      { facingMode: "environment" },
-      { fps: 10, qrbox: 250 },
-      (decodedText) => {
+    try {
+      activeQrScanner = new Html5Qrcode("qr-reader");
+      const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+      const onScanSuccess = (decodedText) => {
         handleQrLogin(decodedText);
-      },
-      (errorMessage) => {
-        // quiet fail camera logs
+      };
+      
+      // Strategy 1: Try environment (rear) camera
+      // Strategy 2: Try user (front/webcam) camera
+      // Strategy 3: Try enumerating available cameras directly
+      try {
+        await activeQrScanner.start({ facingMode: "environment" }, config, onScanSuccess, () => {});
+      } catch (envErr) {
+        console.warn("Environment camera not available, trying front/user camera:", envErr);
+        try {
+          await activeQrScanner.start({ facingMode: "user" }, config, onScanSuccess, () => {});
+        } catch (userErr) {
+          console.warn("User camera direct constraint failed, querying camera list:", userErr);
+          const cameras = await Html5Qrcode.getCameras();
+          if (cameras && cameras.length > 0) {
+            await activeQrScanner.start(cameras[0].id, config, onScanSuccess, () => {});
+          } else {
+            throw new Error("No video input devices found");
+          }
+        }
       }
-    ).then(() => {
-      document.getElementById('start-qr-btn').innerHTML = `<i class="fa-solid fa-camera-slash"></i> <span>${TRANSLATIONS[currentLanguage].stop_camera}</span>`;
-    }).catch(err => {
-      console.error(err);
-      showToast(currentLanguage === 'ar' ? "فشل الوصول إلى الكاميرا" : "Camera access denied", "danger");
-    });
+      
+      startBtn.innerHTML = `<i class="fa-solid fa-camera-slash"></i> <span>${TRANSLATIONS[currentLanguage].stop_camera}</span>`;
+    } catch (err) {
+      console.error("Camera startup error:", err);
+      if (activeQrScanner) {
+        try { activeQrScanner.clear(); } catch(e){}
+        activeQrScanner = null;
+      }
+      startBtn.innerHTML = `<i class="fa-solid fa-camera"></i> <span>${TRANSLATIONS[currentLanguage].start_camera}</span>`;
+      
+      let errorMsg = currentLanguage === 'ar' 
+        ? "تعذر تشغيل الكاميرا: يرجى السماح للمتصفح بالوصول إليها، أو اختر صورة رمز QR من جهازك مباشرة." 
+        : "Camera access denied. Please allow camera permissions or upload your QR image.";
+      
+      if (location.protocol !== 'https:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+        errorMsg = currentLanguage === 'ar' 
+          ? "تنبيه أمان المتصفح: الكاميرا تتطلب تشغيل الموقع عبر HTTPS أو localhost." 
+          : "Browser security notice: Camera requires HTTPS or localhost.";
+      }
+      showToast(errorMsg, "danger");
+    }
   };
   
   // Image File QR Reader Upload Event Listener
@@ -2889,7 +2923,6 @@ document.addEventListener('DOMContentLoaded', () => {
     'teach-tab-attendance': 'teacher-attendance-section',
     'teach-tab-files': 'teacher-files-section',
     'teach-tab-summons': 'teacher-summons-section',
-    'teach-tab-exams': 'teacher-exams-section',
     'teach-tab-req': 'teacher-req-section'
   };
   Object.keys(teachTabs).forEach(tabId => {
