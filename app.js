@@ -2022,28 +2022,129 @@ async function triggerAdminScheduleView(classId) {
 }
 
 async function createStudentFromImport({ name, email, password, classId, phone }) {
-  const authBuilder = _supabaseLib.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } });
-  const { data, error } = await authBuilder.auth.signUp({ email, password, options: { data: { name, full_name: name, role: 'student' } } });
-  if (error) throw error;
-  if (!data || !data.user) throw new Error('تعذر إنشاء حساب التلميذ');
-  const { error: profileError } = await sb.from('profiles').upsert({ id: data.user.id, name, email, role: 'student', class_id: classId, phone_number: phone || null, qr_code_token: `allabib_auth:${email}:${password}` });
+  let cleanPassword = String(password || '').trim();
+  if (cleanPassword.length < 6) {
+    cleanPassword = cleanPassword.length > 0 ? (cleanPassword + "123456").substring(0, 8) : 'Allabib2027!';
+  }
+
+  const authBuilder = _supabaseLib.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: { persistSession: false }
+  });
+
+  const { data, error } = await authBuilder.auth.signUp({
+    email: email,
+    password: cleanPassword,
+    options: {
+      data: {
+        name: name,
+        full_name: name,
+        role: 'student'
+      }
+    }
+  });
+
+  let targetUid = data?.user?.id;
+
+  if (error) {
+    // If user already exists in auth.users, resolve UID from existing profile
+    if (error.message && (error.message.includes("already registered") || error.message.includes("already exists"))) {
+      const { data: existingProf } = await sb.from('profiles').select('id').eq('email', email).maybeSingle();
+      if (existingProf) {
+        targetUid = existingProf.id;
+      }
+    } else {
+      throw error;
+    }
+  }
+
+  if (!targetUid) {
+    const { data: prof } = await sb.from('profiles').select('id').eq('email', email).maybeSingle();
+    if (prof) targetUid = prof.id;
+    else throw new Error(error ? error.message : 'تعذر إنشاء حساب التلميذ');
+  }
+
+  const qrToken = `allabib_auth:${email}:${cleanPassword}`;
+  const { error: profileError } = await sb.from('profiles').upsert({
+    id: targetUid,
+    name: name,
+    email: email,
+    role: 'student',
+    class_id: classId,
+    phone_number: phone || null,
+    qr_code_token: qrToken
+  });
+
   if (profileError) throw profileError;
 }
-function importValue(row, names) { const key = Object.keys(row).find(k => names.includes(String(k).trim().toLowerCase())); return key === undefined ? '' : String(row[key] || '').trim(); }
+
+function importValue(row, names) {
+  const keys = Object.keys(row);
+  const matchedKey = keys.find(k => {
+    const cleanK = String(k || '').trim().toLowerCase().replace(/[_\s-]+/g, '');
+    return names.some(n => {
+      const cleanN = String(n || '').trim().toLowerCase().replace(/[_\s-]+/g, '');
+      return cleanK === cleanN || cleanK.includes(cleanN) || cleanN.includes(cleanK);
+    });
+  });
+  return matchedKey === undefined ? '' : String(row[matchedKey] !== undefined && row[matchedKey] !== null ? row[matchedKey] : '').trim();
+}
+
 async function importStudentsFile(file) {
   if (!file) throw new Error('يرجى اختيار ملف أولاً');
   if (!window.XLSX) throw new Error('مكتبة قراءة Excel غير متاحة، يرجى إعادة تحميل الصفحة');
+  
   const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array' });
-  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { defval: '' });
+  
+  // Pick the sheet that contains student data
+  let targetSheet = workbook.Sheets[workbook.SheetNames[0]];
+  for (const sheetName of workbook.SheetNames) {
+    const s = workbook.Sheets[sheetName];
+    const testRows = XLSX.utils.sheet_to_json(s, { header: 1 });
+    if (testRows.length > 0) {
+      const firstRowStr = JSON.stringify(testRows[0]).toLowerCase();
+      if (firstRowStr.includes('name') || firstRowStr.includes('الاسم') || firstRowStr.includes('email') || firstRowStr.includes('البريد')) {
+        targetSheet = s;
+        break;
+      }
+    }
+  }
+
+  const rows = XLSX.utils.sheet_to_json(targetSheet, { defval: '' });
   if (!rows.length) throw new Error('الملف لا يحتوي على بيانات');
-  const { data: classes, error } = await sb.from('classes').select('id, name'); if (error) throw error;
+  
+  const { data: classes, error } = await sb.from('classes').select('id, name');
+  if (error) throw error;
+  
   const result = { success: 0, failed: [] };
+  
   for (let i = 0; i < rows.length; i++) {
-    const row = rows[i], name = importValue(row, ['name','full_name','الاسم','الاسم الكامل']), email = importValue(row, ['email','البريد','البريد الإلكتروني']), password = importValue(row, ['password','كلمة المرور']) || 'Allabib2027!', className = importValue(row, ['class','class_name','القسم']), phone = importValue(row, ['phone','phone_number','الهاتف']);
-    const classItem = (classes || []).find(c => c.name.trim().toLowerCase() === className.toLowerCase());
-    try { if (!name || !email || !classItem) throw new Error(!classItem ? 'القسم غير موجود' : 'الاسم والبريد مطلوبان'); await createStudentFromImport({ name, email, password, classId: classItem.id, phone }); result.success++; }
-    catch (err) { result.failed.push(`السطر ${i + 2}: ${err.message}`); }
-  } return result;
+    const row = rows[i];
+    const name = importValue(row, ['name', 'full_name', 'fullname', 'nom', 'nom_complet', 'الاسم', 'الاسم الكامل', 'اسم التلميذ']);
+    const email = importValue(row, ['email', 'mail', 'e-mail', 'courriel', 'البريد', 'البريد الإلكتروني', 'بريد', 'الايميل']);
+    const password = importValue(row, ['password', 'pass', 'pwd', 'mdp', 'mot_de_passe', 'mot de passe', 'كلمة المرور', 'كلمة سر', 'كلمة السر', 'الرمز السري', 'الرقم السري']);
+    const className = importValue(row, ['class', 'class_name', 'classname', 'classe', 'niveau', 'القسم', 'الشعبة', 'الفصل', 'المستوى']);
+    const phone = importValue(row, ['phone', 'phone_number', 'phonenumber', 'tel', 'telephone', 'gsm', 'الهاتف', 'رقم الهاتف']);
+
+    const cleanClass = s => (s || '').toString().trim().toLowerCase().replace(/\s+/g, ' ');
+    const classItem = (classes || []).find(c => cleanClass(c.name) === cleanClass(className));
+
+    try {
+      if (!name || !email || !classItem) {
+        throw new Error(!classItem ? `القسم "${className}" غير مسجل في النظام` : 'الاسم والبريد الإلكتروني مطلوبان');
+      }
+      await createStudentFromImport({
+        name,
+        email,
+        password: password || 'Allabib2027!',
+        classId: classItem.id,
+        phone
+      });
+      result.success++;
+    } catch (err) {
+      result.failed.push(`السطر ${i + 2} (${name || email || 'تلميذ'}): ${err.message}`);
+    }
+  }
+  return result;
 }
 // User accounts creator (Initiates full Supabase Auth Lifecycle & enriches profile)
 document.getElementById('admin-user-create-form').onsubmit = async (e) => {
