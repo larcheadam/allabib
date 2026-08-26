@@ -2910,12 +2910,34 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   // Log out button trigger
-  document.getElementById('logout-btn').onclick = async () => {
-    const { error } = await sb.auth.signOut();
-    if (!error) {
-      showToast(currentLanguage === 'ar' ? "تم تسجيل الخروج" : "Logged out", "success");
+  const performLogout = async (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
     }
+    const userDropdown = document.getElementById('user-dropdown');
+    if (userDropdown) userDropdown.classList.add('hidden');
+    
+    try {
+      await sb.auth.signOut();
+    } catch (err) {
+      console.warn("SignOut request error (proceeding with local cleanup):", err);
+    }
+    
+    currentUser = null;
+    userProfile = null;
+    const userMenu = document.getElementById('user-menu');
+    if (userMenu) userMenu.classList.add('hidden');
+    const bellArea = document.getElementById('bell-area');
+    if (bellArea) bellArea.classList.add('hidden');
+    
+    showView('view-landing');
+    window.location.hash = '/landing';
+    showToast(currentLanguage === 'ar' ? "تم تسجيل الخروج بنجاح" : "Déconnexion réussie", "success");
   };
+
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.onclick = performLogout;
   
   // Teacher tabs view selector
   const teachTabs = {
