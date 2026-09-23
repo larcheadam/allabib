@@ -1063,12 +1063,14 @@ function renderTimetableGrid(slots, tbodyId) {
         const subName = match.subjects
           ? (currentLanguage === 'ar' ? match.subjects.name_ar : match.subjects.name_fr)
           : '—';
+        const className = match.classes ? match.classes.name : '';
         const teacherName = match.profiles ? match.profiles.name : '';
         const room = match.room_number || '';
 
         slotTd.innerHTML = `
           <div class="timetable-slot-cell">
             <div class="timetable-subject">${subName}</div>
+            ${className ? `<div class="timetable-class"><i class="fa-solid fa-users"></i> ${className}</div>` : ''}
             ${teacherName ? `<div class="timetable-teacher"><i class="fa-solid fa-chalkboard-user"></i> ${teacherName}</div>` : ''}
             ${room ? `<div class="timetable-room"><i class="fa-solid fa-door-open"></i> ${room}</div>` : ''}
           </div>
@@ -1104,44 +1106,69 @@ async function loadStudentResources(classId) {
       
       const isImg = file.file_type === 'image';
       const isVid = file.file_type === 'video' || (file.file_url && (file.file_url.includes('youtube.com') || file.file_url.includes('youtu.be')));
+      const isHomework = file.file_type === 'homework' || (!file.file_url || file.file_url === '#' || file.file_url.startsWith('homework:'));
       const ytEmbed = isVid ? getYouTubeEmbedUrl(file.file_url) : null;
       const subjectName = file.subjects ? (currentLanguage === 'ar' ? file.subjects.name_ar : file.subjects.name_fr) : '';
       const teacherName = file.profiles ? file.profiles.name : '';
       
+      let hwText = '';
+      if (file.file_url && file.file_url.startsWith('homework:')) {
+        hwText = file.file_url.replace('homework:', '').trim();
+      }
+      
       let mediaContent = '';
-      if (ytEmbed) {
+      if (hwText) {
+        mediaContent = `
+          <div class="homework-box mt-2 p-3 bg-light rounded border">
+            <div class="fw-bold mb-1"><i class="fa-solid fa-pencil text-success"></i> ${currentLanguage === 'ar' ? 'نص الواجب / التمرين المنزلي:' : 'Consigne du devoir:'}</div>
+            <div class="text-secondary" style="white-space: pre-wrap;">${hwText}</div>
+          </div>`;
+      } else if (ytEmbed) {
         mediaContent = `
           <div class="video-embed-wrapper mt-2">
             <iframe src="${ytEmbed}" allowfullscreen></iframe>
           </div>`;
-      } else if (isVid) {
+      } else if (isVid && file.file_url && file.file_url !== '#') {
         mediaContent = `
           <a href="${file.file_url}" target="_blank" class="video-link-badge mt-2">
-            <i class="fa-brands fa-youtube"></i> ${currentLanguage === 'ar' ? 'مشاهدة الفيديو' : 'Regarder la فيديو'}
+            <i class="fa-brands fa-youtube"></i> ${currentLanguage === 'ar' ? 'مشاهدة الفيديو' : 'Regarder la vidéo'}
           </a>`;
-      } else if (isImg && file.file_url) {
+      } else if (isImg && file.file_url && file.file_url !== '#') {
         mediaContent = `
           <div class="resource-img-preview mt-2">
             <img src="${file.file_url}" alt="${file.title}" style="max-width:100%; max-height:240px; border-radius:8px; object-fit:cover;">
           </div>`;
       }
       
-      item.innerHTML = `
-        <div class="d-flex align-items-center gap-3 mb-2">
-          <div class="res-icon ${isImg ? 'type-image' : (isVid ? 'text-danger' : '')}">
-            <i class="fa-solid ${isImg ? 'fa-file-image text-warning' : (isVid ? 'fa-video text-danger' : 'fa-file-pdf text-primary')} fa-2x"></i>
-          </div>
-          <div class="res-info flex-grow-1">
-            <h5 class="m-0">${file.title}</h5>
-            <small class="text-muted">${subjectName} ${teacherName ? '| أستاذ ' + teacherName : ''}</small>
-          </div>
-        </div>
-        ${mediaContent}
+      let icon = 'fa-file-pdf text-primary';
+      if (isImg) icon = 'fa-file-image text-warning';
+      else if (isVid) icon = 'fa-video text-danger';
+      else if (isHomework) icon = 'fa-book-open-reader text-success';
+
+      const typeBadge = isHomework 
+        ? `<span class="badge btn-success ms-2 me-2" style="font-size:0.75rem">${currentLanguage === 'ar' ? 'واجب / تمرين منزلي' : 'Devoir'}</span>`
+        : '';
+
+      const downloadBtn = (file.file_url && file.file_url !== '#' && !file.file_url.startsWith('homework:')) ? `
         <div class="mt-2 text-start">
           <a href="${file.file_url}" target="_blank" class="btn btn-sm btn-secondary">
             <i class="fa-solid fa-arrow-up-right-from-square"></i> ${TRANSLATIONS[currentLanguage].download || 'فتح / تحميل'}
           </a>
         </div>
+      ` : '';
+      
+      item.innerHTML = `
+        <div class="d-flex align-items-center gap-3 mb-2">
+          <div class="res-icon">
+            <i class="fa-solid ${icon} fa-2x"></i>
+          </div>
+          <div class="res-info flex-grow-1">
+            <h5 class="m-0">${file.title} ${typeBadge}</h5>
+            <small class="text-muted">${subjectName} ${teacherName ? '| أستاذ ' + teacherName : ''}</small>
+          </div>
+        </div>
+        ${mediaContent}
+        ${downloadBtn}
       `;
       container.appendChild(item);
     });
@@ -1153,8 +1180,9 @@ async function loadStudentResources(classId) {
 async function loadStudentAbsences(studentId) {
   const { data: list } = await sb
     .from('attendance')
-    .select('*')
-    .eq('student_id', studentId);
+    .select('*, timetables(*, subjects(*), profiles!teacher_id(*))')
+    .eq('student_id', studentId)
+    .order('date', { ascending: false });
     
   const tbody = document.getElementById('student-attendance-body');
   tbody.innerHTML = '';
@@ -1177,16 +1205,34 @@ async function loadStudentAbsences(studentId) {
         ? (currentLanguage === 'ar' ? "مبرر" : "Justifié") 
         : (currentLanguage === 'ar' ? "غير مبرر" : "Non justifié");
         
+      let sessionDetails = '—';
+      if (rec.timetables) {
+        const sub = rec.timetables.subjects 
+          ? (currentLanguage === 'ar' ? rec.timetables.subjects.name_ar : rec.timetables.subjects.name_fr) 
+          : '';
+        const time = (rec.timetables.start_time && rec.timetables.end_time) 
+          ? `${rec.timetables.start_time.substring(0, 5)} - ${rec.timetables.end_time.substring(0, 5)}` 
+          : '';
+        const teacher = rec.timetables.profiles ? rec.timetables.profiles.name : '';
+        const room = rec.timetables.room_number ? `${currentLanguage === 'ar' ? 'قاعة' : 'Salle'} ${rec.timetables.room_number}` : '';
+        sessionDetails = `
+          <strong>${sub || (currentLanguage === 'ar' ? 'حصة دراسية' : 'Session')}</strong>
+          ${time ? `<br><small class="text-muted"><i class="fa-regular fa-clock"></i> ${time}</small>` : ''}
+          ${teacher ? `<br><small class="text-muted"><i class="fa-solid fa-chalkboard-user"></i> ${teacher} ${room ? `(${room})` : ''}</small>` : ''}
+        `;
+      }
+      
       row.innerHTML = `
         <td>${rec.date}</td>
+        <td>${sessionDetails}</td>
         <td class="${statusClass}"><strong>${statusText}</strong></td>
         <td><span class="badge ${rec.justified ? 'btn-success' : 'btn-secondary'}">${justification}</span></td>
       `;
       tbody.appendChild(row);
     });
   } else {
-    row = document.createElement('tr');
-    row.innerHTML = `<td colspan="3" class="text-center text-muted">${currentLanguage === 'ar' ? 'لا يوجد سجل غيابات' : 'No absence records'}</td>`;
+    const row = document.createElement('tr');
+    row.innerHTML = `<td colspan="4" class="text-center text-muted">${currentLanguage === 'ar' ? 'لا يوجد سجل غيابات' : 'No absence records'}</td>`;
     tbody.appendChild(row);
   }
 }
@@ -1544,12 +1590,14 @@ document.getElementById('teach-save-attendance-btn').onclick = async () => {
   }
 };
 
-// Resource Upload submit logic (Supports Files & Video Links)
+// Resource Upload submit logic (Supports Files, Video Links & Homework without files)
 document.getElementById('teacher-resource-form').onsubmit = async (e) => {
   e.preventDefault();
   const classId = document.getElementById('res-class-select').value;
   const subjectId = document.getElementById('res-subject-select').value;
   const title = document.getElementById('res-title').value.trim();
+  const descriptionInput = document.getElementById('res-description');
+  const description = descriptionInput ? descriptionInput.value.trim() : '';
   const fileInput = document.getElementById('res-file');
   const videoUrlInput = document.getElementById('res-video-url');
   
@@ -1558,13 +1606,13 @@ document.getElementById('teacher-resource-form').onsubmit = async (e) => {
     return;
   }
   
-  const file = fileInput ? fileInput.files[0] : null;
-  const videoUrl = videoUrlInput ? videoUrlInput.value.trim() : '';
-  
-  if (!file && !videoUrl) {
-    showToast(currentLanguage === 'ar' ? "يرجى اختيار ملف أو إدخال رابط فيديو" : "Please select a file or enter a video URL", "warning");
+  if (!title) {
+    showToast(currentLanguage === 'ar' ? "يرجى إدخال عنوان للدرس أو الواجب" : "Please enter a title", "warning");
     return;
   }
+  
+  const file = fileInput ? fileInput.files[0] : null;
+  const videoUrl = videoUrlInput ? videoUrlInput.value.trim() : '';
   
   const uploadBtn = document.getElementById('btn-upload-resource');
   const progressWrapper = document.getElementById('upload-progress-wrapper');
@@ -1575,8 +1623,8 @@ document.getElementById('teacher-resource-form').onsubmit = async (e) => {
   if (file && progressWrapper) progressWrapper.classList.remove('hidden');
   
   try {
-    let finalUrl = videoUrl;
-    let fileType = 'video';
+    let finalUrl = '#';
+    let fileType = 'homework';
     let publicId = null;
     
     if (file) {
@@ -1587,6 +1635,20 @@ document.getElementById('teacher-resource-form').onsubmit = async (e) => {
       finalUrl = uploadRes.url;
       fileType = uploadRes.fileType;
       publicId = uploadRes.publicId;
+    } else if (videoUrl) {
+      finalUrl = videoUrl;
+      fileType = 'video';
+    } else if (description) {
+      finalUrl = `homework:${description}`;
+      fileType = 'homework';
+    } else {
+      finalUrl = `homework:${title}`;
+      fileType = 'homework';
+    }
+    
+    let finalTitle = title;
+    if (description && (file || videoUrl)) {
+      finalTitle = `${title} (${description})`.substring(0, 195);
     }
     
     // Determine valid teacher UUID safely
@@ -1610,9 +1672,9 @@ document.getElementById('teacher-resource-form').onsubmit = async (e) => {
       class_id: parseInt(classId),
       subject_id: parseInt(subjectId),
       teacher_id: teacherId,
-      title: title,
+      title: finalTitle,
       file_url: finalUrl,
-      file_type: fileType || 'pdf',
+      file_type: fileType || 'homework',
       file_public_id: publicId || `res_${Date.now()}`
     });
     
@@ -2361,7 +2423,7 @@ window.deleteAnnouncement = async (id) => {
 async function loadAdminAbsencesList() {
   const { data: list } = await sb
     .from('attendance')
-    .select('*, profiles(*)')
+    .select('*, profiles(*), timetables(*, subjects(*))')
     .order('date', { ascending: false });
     
   const tbody = document.getElementById('admin-absence-table-body');
@@ -2375,9 +2437,19 @@ async function loadAdminAbsencesList() {
         : (currentLanguage === 'ar' ? 'تأخر' : 'Retard');
       const statusClass = item.status === 'absent' ? 'text-danger' : 'text-warning';
       
+      const subName = item.timetables && item.timetables.subjects
+        ? (currentLanguage === 'ar' ? item.timetables.subjects.name_ar : item.timetables.subjects.name_fr)
+        : '';
+      const timeStr = (item.timetables && item.timetables.start_time && item.timetables.end_time)
+        ? `${item.timetables.start_time.substring(0, 5)} - ${item.timetables.end_time.substring(0, 5)}`
+        : '';
+      const sessionBadge = subName 
+        ? `<br><small class="text-muted"><i class="fa-solid fa-book-bookmark text-primary"></i> ${subName} ${timeStr ? `(${timeStr})` : ''}</small>` 
+        : '';
+      
       row.innerHTML = `
-        <td><strong>${item.profiles.name}</strong></td>
-        <td>${item.date}</td>
+        <td><strong>${item.profiles ? item.profiles.name : '—'}</strong></td>
+        <td>${item.date}${sessionBadge}</td>
         <td class="${statusClass}"><strong>${statusLbl}</strong></td>
         <td>
           <button class="btn btn-secondary btn-sm" onclick="toggleAbsenceJustification(${item.id}, ${item.justified})">
@@ -2551,7 +2623,7 @@ window.deleteHoliday = async (id) => {
 async function loadSubstitutionsLogs() {
   const { data: list } = await sb
     .from('session_substitutions')
-    .select('*, timetables(*, classes(*), subjects(*))')
+    .select('*, timetables(*, classes(*), subjects(*)), profiles!substitute_teacher_id(*)')
     .order('date', { ascending: false });
     
   const tbody = document.getElementById('admin-subs-table-body');
@@ -2560,23 +2632,46 @@ async function loadSubstitutionsLogs() {
   if (list && list.length > 0) {
     list.forEach(item => {
       const row = document.createElement('tr');
-      const cName = item.timetables.classes.name;
-      const sName = currentLanguage === 'ar' ? item.timetables.subjects.name_ar : item.timetables.subjects.name_fr;
+      const cName = (item.timetables && item.timetables.classes) ? item.timetables.classes.name : '—';
+      const sName = (item.timetables && item.timetables.subjects) 
+        ? (currentLanguage === 'ar' ? item.timetables.subjects.name_ar : item.timetables.subjects.name_fr) 
+        : '—';
       
       let typeText = '';
-      if (item.status === 'cancelled') typeText = currentLanguage === 'ar' ? 'إلغاء الحصة' : 'Cancelled';
-      else if (item.status === 'substituted') typeText = currentLanguage === 'ar' ? 'أستاذ بديل' : 'Substitution';
-      else typeText = currentLanguage === 'ar' ? 'تغيير قاعة' : 'Room changed';
+      let badgeClass = 'btn-secondary';
+      if (item.status === 'cancelled') {
+        typeText = currentLanguage === 'ar' ? 'إلغاء الحصة' : 'Cancelled';
+        badgeClass = 'btn-danger';
+      } else if (item.status === 'substituted') {
+        typeText = currentLanguage === 'ar' ? 'أستاذ بديل' : 'Substitution';
+        badgeClass = 'btn-success';
+      } else {
+        typeText = currentLanguage === 'ar' ? 'تغيير قاعة' : 'Room changed';
+        badgeClass = 'btn-warning';
+      }
+      
+      let subInfo = '—';
+      if (item.profiles && item.profiles.name) {
+        subInfo = `<strong><i class="fa-solid fa-user-tie text-primary"></i> ${item.profiles.name}</strong>`;
+        if (item.new_room_number) {
+          subInfo += `<br><small class="text-muted"><i class="fa-solid fa-door-open"></i> ${currentLanguage === 'ar' ? 'قاعة' : 'Salle'} ${item.new_room_number}</small>`;
+        }
+      } else if (item.new_room_number) {
+        subInfo = `<strong><i class="fa-solid fa-door-open"></i> ${currentLanguage === 'ar' ? 'قاعة' : 'Salle'} ${item.new_room_number}</strong>`;
+      }
       
       row.innerHTML = `
         <td>${item.date}</td>
         <td>${cName}</td>
         <td>${sName}</td>
-        <td><span class="badge btn-secondary">${typeText}</span></td>
-        <td>${item.notes || ''}</td>
+        <td><span class="badge ${badgeClass}">${typeText}</span></td>
+        <td>${subInfo}</td>
+        <td>${item.notes || '—'}</td>
       `;
       tbody.appendChild(row);
     });
+  } else {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted" style="padding:1rem">${currentLanguage === 'ar' ? 'لا توجد تعويضات مسجلة' : 'No substitutions logged'}</td></tr>`;
   }
 }
 
