@@ -294,6 +294,7 @@
               <thead>
                 <tr>
                   <th data-key="date">التاريخ</th>
+                  <th>الحصة والمادة</th>
                   <th data-key="status">حالة الحضور</th>
                   <th data-key="justification">التبرير</th>
                 </tr>
@@ -405,17 +406,22 @@
               </div>
             </div>
             <div class="form-group mt-3">
-              <label for="res-title" data-key="resource_title">عنوان الدرس أو المورد</label>
-              <input type="text" id="res-title" class="form-control" placeholder="مثال: الفرض الأول، درس الدوال الأسية" required>
+              <label for="res-title">عنوان الدرس أو الواجب / التمرين المنزلي</label>
+              <input type="text" id="res-title" class="form-control" placeholder="مثال: الفرض الأول، تمرين منزلي ص 42، ملخص الدرس" required>
+            </div>
+
+            <div class="form-group mt-3">
+              <label for="res-description">نص التمرين المنزلي أو التوجيهات (اختياري)</label>
+              <textarea id="res-description" class="form-control" rows="3" placeholder="يمكنك كتابة نص التمرين المنزلي أو التوجيهات مباشرة هنا دون الحاجة لرفع أي ملف..."></textarea>
             </div>
             
             <div class="form-group mt-3">
-              <label for="res-file" data-key="select_file">اختر الملف (PDF، صور، مستندات، مقاطع فيديو / بحد أقصى 15 ميغابايت)</label>
+              <label for="res-file">ملف مرفق (PDF، صور، مستندات - اختياري)</label>
               <input type="file" id="res-file" class="form-control" accept=".pdf,image/*,video/*,.doc,.docx,.ppt,.pptx">
             </div>
 
             <div class="form-group mt-3">
-              <label for="res-video-url"><i class="fa-brands fa-youtube text-danger"></i> أو رابط فيديو توضيحي (YouTube / Drive / Mp4)</label>
+              <label for="res-video-url"><i class="fa-brands fa-youtube text-danger"></i> أو رابط فيديو توضيحي (YouTube / Drive - اختياري)</label>
               <input type="url" id="res-video-url" class="form-control" placeholder="https://www.youtube.com/watch?v=..." dir="ltr">
             </div>
             
@@ -428,7 +434,7 @@
             </div>
 
             <button type="submit" class="btn btn-primary mt-3" id="btn-upload-resource">
-              <span data-key="btn_share_resource">رفع ونشر الملف</span>
+              <span>نشر المورد / الواجب للتلاميذ</span>
               <i class="fa-solid fa-share-nodes"></i>
             </button>
           </form>
@@ -745,6 +751,7 @@
                         <th data-key="class">القسم</th>
                         <th data-key="subject">المادة</th>
                         <th data-key="status">نوع الإجراء</th>
+                        <th>الأستاذ البديل / القاعة</th>
                         <th data-key="notes">ملاحظات</th>
                       </tr>
                     </thead>
