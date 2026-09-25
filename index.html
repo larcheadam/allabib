@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Application Design System -->
-  <link rel="stylesheet" href="styles.css?v=v6">
+  <link rel="stylesheet" href="styles.css?v=v7">
 
   <!-- External Libraries (Supabase, HTML5-QRCode, QRCode.js) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.8/dist/umd/supabase.js"></script>
@@ -610,9 +610,40 @@
               <h3><i class="fa-solid fa-calendar-plus"></i> <span data-key="master_timetable_builder_title">مخطط وموزع الاستعمال الزمني الشامل</span></h3>
               <p class="info-text text-muted" data-key="conflict_prevention_info">تتحقق المنظومة في الوقت الفعلي من عدم تداخل حصص الأساتذة، عدم تكرار حجز قاعات الحصص في نفس الوقت، ومطابقة حضور الأقسام.</p>
               
+              <!-- Excel Timetable Import Box -->
+              <div class="card-nested mt-3 mb-4" style="background: linear-gradient(135deg, rgba(14,165,233,0.06) 0%, rgba(30,58,138,0.06) 100%); border: 1.5px dashed #0ea5e9; border-radius: 12px; padding: 1.25rem;">
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                  <h4 class="mb-0 text-primary" style="font-size: 1.1rem;"><i class="fa-solid fa-file-excel text-success me-1"></i> <span>استيراد جدول الحصص من ملف Excel</span></h4>
+                  <button type="button" id="btn-download-timetable-template" class="btn btn-outline-primary btn-sm">
+                    <i class="fa-solid fa-download"></i> <span>تحميل نموذج Excel فارغ</span>
+                  </button>
+                </div>
+                <p class="text-muted small mb-3">يمكنك رفع جدول الحصص الأسبوعي للقسم دفعة واحدة من ملف Excel. سيقوم النظام تلقائياً بالتعرف على المواد والأساتذة والقاعات وتطبيق الجدول فوراً.</p>
+                
+                <form id="admin-import-timetable-form">
+                  <div class="grid-3">
+                    <div class="form-group">
+                      <label for="import-tt-class">القسم المعني بالجدول:</label>
+                      <select id="import-tt-class" class="form-control" required>
+                        <option value="">-- اختر القسم --</option>
+                      </select>
+                    </div>
+                    <div class="form-group">
+                      <label for="import-tt-file">ملف Excel (.xlsx / .xls / .csv):</label>
+                      <input type="file" id="import-tt-file" class="form-control" accept=".xlsx, .xls, .csv" required>
+                    </div>
+                    <div class="form-group d-flex align-items-end">
+                      <button type="submit" id="btn-submit-import-tt" class="btn btn-primary w-100">
+                        <i class="fa-solid fa-upload"></i> <span>استيراد وتطبيق الجدول</span>
+                      </button>
+                    </div>
+                  </div>
+                </form>
+              </div>
+
               <!-- Creator Form -->
               <form id="admin-timetable-form" class="card-nested mt-3">
-                <h4 data-key="add_timetable_slot">جدولة حصة دراسية جديدة</h4>
+                <h4 data-key="add_timetable_slot">جدولة حصة دراسية جديدة (يدوياً)</h4>
                 <div class="grid-3 mt-2">
                   <div class="form-group">
                     <label for="tt-class" data-key="target_class">القسم الدراسي</label>
@@ -1161,7 +1192,7 @@
     </div>
   </div>
   <!-- Main Application Logic Script -->
-  <script src="app.js?v=v6" defer></script>
+  <script src="app.js?v=v7" defer></script>
 
   <!-- Safety Fallback Script: Guarantee Loader Dismissal -->
   <script>
