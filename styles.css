@@ -1804,3 +1804,23 @@ html[lang="fr"] .toast.toast-warning { border-left-color: var(--warning-color); 
   padding-top: 0.5rem;
   margin-top: 0.5rem !important;
 }
+
+/* Enhancements: Timetable class label, homework boxes */
+.timetable-class {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #0284c7;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  padding: 3px 8px;
+  border-radius: 6px;
+  display: inline-block;
+  margin: 3px 0;
+}
+
+.homework-box {
+  background: rgba(16, 185, 129, 0.05);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 8px;
+  font-size: 0.88rem;
+}
