@@ -1968,6 +1968,7 @@ async function populateAdminSelects() {
   
   const classSelects = [
     document.getElementById('tt-class'),
+    document.getElementById('import-tt-class'),
     document.getElementById('timetable-view-class-select'),
     document.getElementById('adm-sub-class-select'),
     document.getElementById('usr-class'),
@@ -2117,6 +2118,260 @@ async function triggerAdminScheduleView(classId) {
   
   if (error) console.error('Timetable load error:', error);
   renderTimetableGrid(slots || [], 'admin-timetable-grid-body');
+}
+
+// DOWNLOAD TIMETABLE TEMPLATE
+const btnDownloadTtTemplate = document.getElementById('btn-download-timetable-template');
+if (btnDownloadTtTemplate) {
+  btnDownloadTtTemplate.onclick = async () => {
+    if (!window.XLSX) {
+      showToast(currentLanguage === 'ar' ? 'مكتبة Excel غير جاهزة، يرجى تحديث الصفحة' : 'Excel library not ready', 'danger');
+      return;
+    }
+    
+    // Fetch real subjects & teachers to make the sample realistic and helpful
+    const [{ data: subjects }, { data: teachers }] = await Promise.all([
+      sb.from('subjects').select('name_ar, name_fr').limit(6),
+      sb.from('profiles').select('name, email').eq('role', 'teacher').limit(6)
+    ]);
+    
+    const s1 = (subjects && subjects[0]) ? subjects[0].name_ar : 'الرياضيات';
+    const s2 = (subjects && subjects[1]) ? subjects[1].name_ar : 'اللغة العربية';
+    const s3 = (subjects && subjects[2]) ? subjects[2].name_ar : 'الفيزياء والكيمياء';
+    const s4 = (subjects && subjects[3]) ? subjects[3].name_ar : 'علوم الحياة والأرض';
+    const s5 = (subjects && subjects[4]) ? subjects[4].name_ar : 'اللغة الفرنسية';
+    
+    const t1 = (teachers && teachers[0]) ? (teachers[0].name || teachers[0].email) : 'حسن بغلال';
+    const t2 = (teachers && teachers[1]) ? (teachers[1].name || teachers[1].email) : 'فاطمة الزهراء';
+    const t3 = (teachers && teachers[2]) ? (teachers[2].name || teachers[2].email) : 'محمد العلمي';
+    
+    const headers = [
+      'اليوم (Jour)',
+      'المادة (Matiere)',
+      'الأستاذ (Enseignant/Email)',
+      'وقت البدء (Debut)',
+      'وقت الانتهاء (Fin)',
+      'القاعة (Salle)'
+    ];
+    
+    const sampleRows = [
+      headers,
+      ['الاثنين', s1, t1, '08:00', '10:00', '1'],
+      ['الاثنين', s2, t2, '10:00', '12:00', '2'],
+      ['الثلاثاء', s3, t3, '14:00', '16:00', 'المختبر 1'],
+      ['الأربعاء', s4, t1, '08:00', '10:00', '3'],
+      ['الخميس', s5, t2, '10:00', '12:00', '4'],
+      ['الجمعة', s1, t1, '08:00', '10:00', '1'],
+      ['السبت', s2, t2, '10:00', '12:00', '2']
+    ];
+    
+    const ws = XLSX.utils.aoa_to_sheet(sampleRows);
+    ws['!cols'] = [
+      { wch: 18 },
+      { wch: 26 },
+      { wch: 28 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 16 }
+    ];
+    
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Emploi_du_Temps');
+    XLSX.writeFile(wb, 'modele_emploi_du_temps.xlsx');
+    showToast(currentLanguage === 'ar' ? 'تم تنزيل نموذج الجدول بنجاح!' : 'Timetable template downloaded!', 'success');
+  };
+}
+
+// PARSE TIME HELPER
+function parseTimetableTime(val) {
+  if (val === undefined || val === null || val === '') return null;
+  if (typeof val === 'number') {
+    const totalMinutes = Math.round(val * 24 * 60);
+    const hours = Math.floor(totalMinutes / 60) % 24;
+    const minutes = totalMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`;
+  }
+  let str = String(val).trim().toLowerCase();
+  str = str.replace('h', ':').replace(';', ':').replace('.', ':');
+  const m = str.match(/^(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
+  if (m) {
+    const h = String(parseInt(m[1])).padStart(2, '0');
+    const min = String(parseInt(m[2])).padStart(2, '0');
+    const s = m[3] ? String(parseInt(m[3])).padStart(2, '0') : '00';
+    return `${h}:${min}:${s}`;
+  }
+  if (/^\d{1,2}$/.test(str)) {
+    return `${String(parseInt(str)).padStart(2, '0')}:00:00`;
+  }
+  return null;
+}
+
+// PARSE DAY HELPER
+function parseTimetableDay(val) {
+  if (val === undefined || val === null || val === '') return null;
+  const str = String(val).trim().toLowerCase();
+  if (['0', 'الاثنين', 'الإثنين', 'lundi', 'lun', 'mon', 'monday'].includes(str)) return 0;
+  if (['1', 'الثلاثاء', 'mardi', 'mar', 'tue', 'tuesday'].includes(str)) return 1;
+  if (['2', 'الأربعاء', 'الاربعاء', 'mercredi', 'mer', 'wed', 'wednesday'].includes(str)) return 2;
+  if (['3', 'الخميس', 'jeudi', 'jeu', 'thu', 'thursday'].includes(str)) return 3;
+  if (['4', 'الجمعة', 'vendredi', 'ven', 'fri', 'friday'].includes(str)) return 4;
+  if (['5', 'السبت', 'samedi', 'sam', 'sat', 'saturday'].includes(str)) return 5;
+  if (['6', 'الأحد', 'الاحد', 'dimanche', 'dim', 'sun', 'sunday'].includes(str)) return 6;
+  const num = parseInt(str);
+  if (!isNaN(num) && num >= 0 && num <= 6) return num;
+  return null;
+}
+
+// IMPORT TIMETABLE FORM SUBMIT
+const adminImportTtForm = document.getElementById('admin-import-timetable-form');
+if (adminImportTtForm) {
+  adminImportTtForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const classId = document.getElementById('import-tt-class').value;
+    const fileInput = document.getElementById('import-tt-file');
+    const file = fileInput.files[0];
+    const submitBtn = document.getElementById('btn-submit-import-tt');
+    
+    if (!classId) {
+      showToast(currentLanguage === 'ar' ? 'يرجى اختيار القسم أولاً' : 'Please select a class first', 'warning');
+      return;
+    }
+    if (!file) {
+      showToast(currentLanguage === 'ar' ? 'يرجى اختيار ملف Excel' : 'Please select an Excel file', 'warning');
+      return;
+    }
+    
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${currentLanguage === 'ar' ? 'جاري قراءة ومعالجة الملف...' : 'Processing file...'}`;
+    
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+      
+      if (!rows || rows.length === 0) {
+        throw new Error(currentLanguage === 'ar' ? 'الملف لا يحتوي على أي صفوف بيانات' : 'The file contains no data');
+      }
+      
+      // Pre-fetch all subjects and teachers for fast matching
+      const [{ data: subjects }, { data: teachers }] = await Promise.all([
+        sb.from('subjects').select('*'),
+        sb.from('profiles').select('*').eq('role', 'teacher')
+      ]);
+      
+      const cleanStr = s => String(s || '').trim().toLowerCase().replace(/[\s_-]+/g, '');
+      
+      let importedCount = 0;
+      let skippedErrors = [];
+      const slotsToInsert = [];
+      
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i];
+        const dayVal = importValue(r, ['day', 'jour', 'اليوم', 'يوم', 'day_of_week']);
+        const subjVal = importValue(r, ['subject', 'matiere', 'matière', 'المادة', 'مادة', 'subject_id']);
+        const teachVal = importValue(r, ['teacher', 'enseignant', 'prof', 'professeur', 'الأستاذ', 'الاستاذ', 'أستاذ', 'استاذ', 'email', 'البريد', 'teacher_id']);
+        const startVal = importValue(r, ['start', 'start_time', 'debut', 'début', 'heure_debut', 'البدء', 'وقت البدء', 'بداية', 'من']);
+        const endVal = importValue(r, ['end', 'end_time', 'fin', 'heure_fin', 'الانتهاء', 'وقت الانتهاء', 'نهاية', 'إلى', 'الى']);
+        const roomVal = importValue(r, ['room', 'room_number', 'salle', 'القاعة', 'قاعة', 'رقم القاعة']) || '1';
+        
+        const rowNum = i + 2;
+        
+        if (!dayVal && !subjVal && !teachVal) continue; // Skip completely empty rows
+        
+        const day = parseTimetableDay(dayVal);
+        if (day === null) {
+          skippedErrors.push(`السطر ${rowNum}: اليوم "${dayVal}" غير صالح`);
+          continue;
+        }
+        
+        const startTime = parseTimetableTime(startVal);
+        const endTime = parseTimetableTime(endVal);
+        if (!startTime || !endTime) {
+          skippedErrors.push(`السطر ${rowNum}: توقيت غير صالح (${startVal} - ${endVal})`);
+          continue;
+        }
+        
+        // Match Subject
+        let matchedSubject = (subjects || []).find(s => 
+          cleanStr(s.name_ar) === cleanStr(subjVal) || 
+          cleanStr(s.name_fr) === cleanStr(subjVal) ||
+          cleanStr(s.name_ar).includes(cleanStr(subjVal)) ||
+          cleanStr(subjVal).includes(cleanStr(s.name_ar))
+        );
+        
+        if (!matchedSubject && subjects && subjects.length > 0) {
+          matchedSubject = subjects[0];
+        }
+        
+        if (!matchedSubject) {
+          skippedErrors.push(`السطر ${rowNum}: المادة "${subjVal}" غير موجودة في النظام`);
+          continue;
+        }
+        
+        // Match Teacher
+        let matchedTeacher = (teachers || []).find(t =>
+          cleanStr(t.email) === cleanStr(teachVal) ||
+          cleanStr(t.name) === cleanStr(teachVal) ||
+          cleanStr(t.name).includes(cleanStr(teachVal)) ||
+          cleanStr(teachVal).includes(cleanStr(t.name))
+        );
+        
+        if (!matchedTeacher && teachers && teachers.length > 0) {
+          matchedTeacher = teachers[0];
+        }
+        
+        if (!matchedTeacher) {
+          skippedErrors.push(`السطر ${rowNum}: الأستاذ "${teachVal}" غير مسجل في النظام كأستاذ`);
+          continue;
+        }
+        
+        slotsToInsert.push({
+          class_id: parseInt(classId),
+          subject_id: matchedSubject.id,
+          teacher_id: matchedTeacher.id,
+          day_of_week: day,
+          start_time: startTime,
+          end_time: endTime,
+          room_number: String(roomVal)
+        });
+      }
+      
+      if (slotsToInsert.length === 0) {
+        throw new Error(skippedErrors.length > 0 ? skippedErrors.join(' | ') : 'لم يتم العثور على حصص صالحة في الملف');
+      }
+      
+      const { error: insertErr } = await sb.from('timetables').insert(slotsToInsert);
+      if (insertErr) throw insertErr;
+      
+      importedCount = slotsToInsert.length;
+      let successMsg = currentLanguage === 'ar' 
+        ? `تم استيراد ${importedCount} حصة بنجاح وتطبيقها على جدول القسم!` 
+        : `${importedCount} sessions imported and applied successfully!`;
+        
+      if (skippedErrors.length > 0) {
+        successMsg += ` (تم تخطي ${skippedErrors.length} صفوف غير مطابقة)`;
+      }
+      
+      showToast(successMsg, 'success');
+      adminImportTtForm.reset();
+      await loadAdminDashboard();
+      
+      // Auto switch view to the imported class
+      const viewClassSelect = document.getElementById('timetable-view-class-select');
+      if (viewClassSelect) {
+        viewClassSelect.value = classId;
+        triggerAdminScheduleView(classId);
+      }
+      
+    } catch (err) {
+      console.error('Timetable import error:', err);
+      showToast(err.message || 'فشل استيراد الجدول من الملف', 'danger');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i class="fa-solid fa-upload"></i> <span>${currentLanguage === 'ar' ? 'استيراد وتطبيق الجدول' : 'Importer et appliquer'}</span>`;
+    }
+  };
 }
 
 async function createStudentFromImport({ name, email, password, classId, phone }) {
