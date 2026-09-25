@@ -1060,11 +1060,25 @@ function renderTimetableGrid(slots, tbodyId) {
       );
 
       if (match) {
-        const subName = match.subjects
-          ? (currentLanguage === 'ar' ? match.subjects.name_ar : match.subjects.name_fr)
-          : '—';
-        const className = match.classes ? match.classes.name : '';
-        const teacherName = match.profiles ? match.profiles.name : '';
+        let subName = '—';
+        if (match.subjects) {
+          const sObj = Array.isArray(match.subjects) ? match.subjects[0] : match.subjects;
+          subName = currentLanguage === 'ar' ? (sObj.name_ar || sObj.name_fr) : (sObj.name_fr || sObj.name_ar);
+        }
+
+        let className = '';
+        if (match.classes) {
+          const cObj = Array.isArray(match.classes) ? match.classes[0] : match.classes;
+          className = cObj ? cObj.name : '';
+        }
+
+        let teacherName = '';
+        // Only show teacher name in student view (not in teacher's own timetable)
+        if (tbodyId !== 'teacher-timetable-body' && match.profiles) {
+          const pObj = Array.isArray(match.profiles) ? match.profiles[0] : match.profiles;
+          teacherName = pObj ? pObj.name : '';
+        }
+
         const room = match.room_number || '';
 
         slotTd.innerHTML = `
@@ -1311,15 +1325,37 @@ async function loadTeacherDashboard() {
   
   document.getElementById('teacher-name-title').innerText = `${currentLanguage === 'ar' ? 'الأستاذ(ة):' : 'Enseignant:'} ${userProfile.name}`;
   
-  // 1. Fetch classes & subjects for selects
-  const { data: schedule, error: schedErr } = await sb
-    .from('timetables')
-    .select('*, subjects(*), classes(*), profiles!teacher_id(*)')
-    .eq('teacher_id', currentUser.id)
-    .order('day_of_week')
-    .order('start_time');
+  // 1. Fetch classes & subjects for selects and schedule
+  const [{ data: schedule, error: schedErr }, { data: allClasses }] = await Promise.all([
+    sb.from('timetables')
+      .select('*, subjects(*), classes(*), profiles!teacher_id(*)')
+      .eq('teacher_id', currentUser.id)
+      .order('day_of_week')
+      .order('start_time'),
+    sb.from('classes').select('id, name')
+  ]);
   
   if (schedErr) console.error('Teacher schedule error:', schedErr);
+  
+  // Build class lookup map to guarantee class names are always resolved
+  const classMap = {};
+  if (allClasses) {
+    allClasses.forEach(c => { classMap[c.id] = c.name; });
+  }
+
+  if (schedule && schedule.length > 0) {
+    schedule.forEach(s => {
+      let cName = null;
+      if (s.classes) {
+        cName = Array.isArray(s.classes) ? s.classes[0]?.name : s.classes.name;
+      }
+      if (!cName && s.class_id && classMap[s.class_id]) {
+        cName = classMap[s.class_id];
+      }
+      s.classes = { name: cName || (s.class_id ? `${currentLanguage === 'ar' ? 'القسم' : 'Classe'} ${s.class_id}` : '') };
+    });
+  }
+
   renderTimetableGrid(schedule || [], 'teacher-timetable-body');
   
   // Populate select boxes in forms
