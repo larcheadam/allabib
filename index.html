@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Application Design System -->
-  <link rel="stylesheet" href="styles.css?v=v7">
+  <link rel="stylesheet" href="styles.css?v=v9">
 
   <!-- External Libraries (Supabase, HTML5-QRCode, QRCode.js) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.8/dist/umd/supabase.js"></script>
@@ -1191,8 +1191,50 @@
       </div>
     </div>
   </div>
+
+  <!-- Password Reset Modal (Triggered by email recovery link or user menu) -->
+  <div id="password-reset-modal" class="modal-backdrop hidden">
+    <div class="modal-content card" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 id="pwd-reset-modal-title"><i class="fa-solid fa-key text-primary me-2"></i> <span data-key="reset_pwd_title">تعيين كلمة مرور جديدة</span></h3>
+        <button class="modal-close" id="close-reset-pwd-btn">&times;</button>
+      </div>
+      <div class="modal-body p-3">
+        <p class="text-muted small mb-3" id="pwd-reset-modal-desc" data-key="reset_pwd_desc">
+          أهلاً بك! يرجى إدخال كلمة المرور الجديدة لحسابك والتأكيد عليها للمتابعة.
+        </p>
+        <form id="password-reset-form">
+          <div class="form-group mb-3">
+            <label for="reset-new-password"><strong>كلمة المرور الجديدة (6 أحرف على الأقل):</strong></label>
+            <div style="position: relative;">
+              <input type="password" id="reset-new-password" class="form-control" placeholder="••••••••" required minlength="6" style="padding-left: 2.5rem;" dir="ltr">
+              <button type="button" class="btn-toggle-pwd" data-target="reset-new-password" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #64748b; cursor: pointer;">
+                <i class="fa-solid fa-eye"></i>
+              </button>
+            </div>
+          </div>
+          <div class="form-group mb-3">
+            <label for="reset-confirm-password"><strong>تأكيد كلمة المرور الجديدة:</strong></label>
+            <div style="position: relative;">
+              <input type="password" id="reset-confirm-password" class="form-control" placeholder="••••••••" required minlength="6" style="padding-left: 2.5rem;" dir="ltr">
+              <button type="button" class="btn-toggle-pwd" data-target="reset-confirm-password" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: #64748b; cursor: pointer;">
+                <i class="fa-solid fa-eye"></i>
+              </button>
+            </div>
+          </div>
+          <div id="reset-pwd-error" class="text-danger small mb-2 hidden"></div>
+          <div class="d-flex justify-content-end gap-2 mt-4">
+            <button type="button" id="btn-cancel-reset-pwd" class="btn btn-secondary">إلغاء</button>
+            <button type="submit" id="btn-submit-reset-pwd" class="btn btn-primary">
+              <i class="fa-solid fa-floppy-disk"></i> <span>حفظ وتعيين كلمة المرور</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
   <!-- Main Application Logic Script -->
-  <script src="app.js?v=v7" defer></script>
+  <script src="app.js?v=v9" defer></script>
 
   <!-- Safety Fallback Script: Guarantee Loader Dismissal -->
   <script>
