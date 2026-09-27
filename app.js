@@ -44,6 +44,10 @@ const TRANSLATIONS = {
     login_title: "تسجيل الدخول للمنظومة",
     email_label: "البريد الإلكتروني",
     password_label: "كلمة المرور",
+    change_password: "تغيير كلمة المرور",
+    forgot_password: "نسيت كلمة المرور؟",
+    reset_pwd_title: "تعيين كلمة مرور جديدة",
+    reset_pwd_desc: "أهلاً بك! يرجى إدخال كلمة المرور الجديدة لحسابك والتأكيد عليها للمتابعة.",
     btn_login: "دخول",
     qr_login_title: "تسجيل دخول سريع بواسطة رمز QR",
     qr_login_desc: "يرجى مسح الرمز الشخصي الموجود في بطاقتك الدراسية أمام كاميرا الهاتف للدخول الفوري.",
@@ -234,6 +238,10 @@ const TRANSLATIONS = {
     login_title: "Connexion �  la Plateforme",
     email_label: "Adresse Email",
     password_label: "Mot de passe",
+    change_password: "Changer le mot de passe",
+    forgot_password: "Mot de passe oublié ?",
+    reset_pwd_title: "Nouveau mot de passe",
+    reset_pwd_desc: "Bienvenue ! Veuillez saisir votre nouveau mot de passe pour continuer.",
     btn_login: "Se connecter",
     qr_login_title: "Connexion rapide par QR Code",
     qr_login_desc: "Veuillez scanner le code personnel figurant sur votre carte scolaire devant la caméra pour vous connecter instantanément.",
@@ -610,6 +618,11 @@ async function initAuth() {
     }
     
     sb.auth.onAuthStateChange(async (event, session) => {
+      console.log('Auth state change event:', event);
+      if (event === 'PASSWORD_RECOVERY') {
+        openPasswordResetModal();
+      }
+      
       if (session) {
         currentUser = session.user;
         await fetchUserProfile(currentUser.id);
@@ -622,6 +635,19 @@ async function initAuth() {
       }
       document.body.classList.remove('loading-state');
     });
+    
+    // Auto-detect password recovery link from email in URL hash
+    if (window.location.hash) {
+      if (window.location.hash.includes('type=recovery')) {
+        setTimeout(openPasswordResetModal, 300);
+      } else if (window.location.hash.includes('error=')) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        const errDesc = hashParams.get('error_description') || hashParams.get('error');
+        if (errDesc) {
+          showToast(decodeURIComponent(errDesc.replace(/\+/g, ' ')), 'danger');
+        }
+      }
+    }
     
     if (!session) {
       document.body.classList.remove('loading-state');
@@ -772,6 +798,127 @@ async function handleQrLogin(decodedText) {
     showToast(currentLanguage === 'ar' ? "رمز QR غير صالح أو غير مسجل بالمنظومة" : "Invalid or unrecognized QR code", "danger");
     console.error("QR login error:", err);
   }
+}
+
+// 7.1 PASSWORD RESET & RECOVERY MODULE
+function openPasswordResetModal(isDirectChange = false) {
+  const modal = document.getElementById('password-reset-modal');
+  if (!modal) return;
+  
+  const form = document.getElementById('password-reset-form');
+  if (form) form.reset();
+  
+  const errBox = document.getElementById('reset-pwd-error');
+  if (errBox) {
+    errBox.classList.add('hidden');
+    errBox.innerText = '';
+  }
+  
+  const titleEl = document.getElementById('pwd-reset-modal-title');
+  const descEl = document.getElementById('pwd-reset-modal-desc');
+  if (isDirectChange) {
+    if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-key text-primary me-2"></i> <span>${TRANSLATIONS[currentLanguage].change_password || 'تغيير كلمة المرور'}</span>`;
+    if (descEl) descEl.innerText = currentLanguage === 'ar' ? 'أدخل كلمة المرور الجديدة لحسابك:' : 'Entrez votre nouveau mot de passe :';
+  } else {
+    if (titleEl) titleEl.innerHTML = `<i class="fa-solid fa-key text-primary me-2"></i> <span>${TRANSLATIONS[currentLanguage].reset_pwd_title || 'تعيين كلمة مرور جديدة'}</span>`;
+    if (descEl) descEl.innerText = currentLanguage === 'ar' ? 'أهلاً بك! يرجى إدخال كلمة المرور الجديدة لحسابك والتأكيد عليها للمتابعة.' : 'Bienvenue ! Veuillez saisir votre nouveau mot de passe pour continuer.';
+  }
+  
+  modal.classList.remove('hidden');
+  const newPassInput = document.getElementById('reset-new-password');
+  if (newPassInput) setTimeout(() => newPassInput.focus(), 150);
+}
+
+function closePasswordResetModal() {
+  const modal = document.getElementById('password-reset-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+// Close and Cancel buttons for Reset Password modal
+const closeResetPwdBtn = document.getElementById('close-reset-pwd-btn');
+if (closeResetPwdBtn) closeResetPwdBtn.onclick = closePasswordResetModal;
+
+const cancelResetPwdBtn = document.getElementById('btn-cancel-reset-pwd');
+if (cancelResetPwdBtn) cancelResetPwdBtn.onclick = closePasswordResetModal;
+
+// Toggle Password visibility buttons
+document.querySelectorAll('.btn-toggle-pwd').forEach(btn => {
+  btn.onclick = () => {
+    const targetId = btn.getAttribute('data-target');
+    const input = document.getElementById(targetId);
+    if (!input) return;
+    const isPass = input.type === 'password';
+    input.type = isPass ? 'text' : 'password';
+    btn.innerHTML = `<i class="fa-solid fa-eye${isPass ? '-slash' : ''}"></i>`;
+  };
+});
+
+// Password Reset Form Submit Handler
+const pwdResetForm = document.getElementById('password-reset-form');
+if (pwdResetForm) {
+  pwdResetForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const newPass = document.getElementById('reset-new-password').value;
+    const confirmPass = document.getElementById('reset-confirm-password').value;
+    const errBox = document.getElementById('reset-pwd-error');
+    const submitBtn = document.getElementById('btn-submit-reset-pwd');
+    
+    if (errBox) {
+      errBox.classList.add('hidden');
+      errBox.innerText = '';
+    }
+    
+    if (newPass.length < 6) {
+      if (errBox) {
+        errBox.innerText = currentLanguage === 'ar' ? 'كلمة المرور يجب أن تتكون من 6 أحرف على الأقل' : 'Le mot de passe doit comporter au moins 6 caractères';
+        errBox.classList.remove('hidden');
+      }
+      return;
+    }
+    if (newPass !== confirmPass) {
+      if (errBox) {
+        errBox.innerText = currentLanguage === 'ar' ? 'كلمتا المرور غير متطابقتين' : 'Les mots de passe ne correspondent pas';
+        errBox.classList.remove('hidden');
+      }
+      return;
+    }
+    
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${currentLanguage === 'ar' ? 'جاري الحفظ...' : 'Enregistrement...'}`;
+    
+    try {
+      const { data, error } = await sb.auth.updateUser({ password: newPass });
+      if (error) throw error;
+      
+      // Update qr_code_token in profiles if user has email to keep QR sync
+      if (currentUser && userProfile && userProfile.email) {
+        const newQrToken = `allabib_auth:${userProfile.email}:${newPass}`;
+        await sb.from('profiles').update({ qr_code_token: newQrToken }).eq('id', currentUser.id);
+        userProfile.qr_code_token = newQrToken;
+      }
+      
+      showToast(currentLanguage === 'ar' ? 'تم تعيين كلمة المرور الجديدة بنجاح!' : 'Mot de passe mis à jour avec succès !', 'success');
+      closePasswordResetModal();
+      
+      // Clean recovery tokens from URL hash so refresh doesn't reopen
+      if (window.location.hash && (window.location.hash.includes('access_token') || window.location.hash.includes('type=recovery'))) {
+        history.replaceState(null, null, window.location.pathname + window.location.search);
+      }
+      
+      if (currentUser) {
+        handleDashboardRouting();
+      }
+    } catch (err) {
+      console.error('Password update error:', err);
+      if (errBox) {
+        errBox.innerText = err.message || (currentLanguage === 'ar' ? 'تعذر تحديث كلمة المرور' : 'Erreur de mise à jour');
+        errBox.classList.remove('hidden');
+      }
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> <span>${currentLanguage === 'ar' ? 'حفظ وتعيين كلمة المرور' : 'Enregistrer le mot de passe'}</span>`;
+    }
+  };
 }
 
 // 8. Timetable overlap conflict checking
