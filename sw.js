@@ -1,5 +1,5 @@
 // sw.js - Service Worker for Etablissement Allabib
-const CACHE_NAME = 'allabib-cache-v7';
+const CACHE_NAME = 'allabib-cache-v8';
 const ASSETS = [
   './',
   './index.html',
