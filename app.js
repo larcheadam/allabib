@@ -450,12 +450,22 @@ function showView(viewId) {
 
 function router() {
   const hash = window.location.hash || '#/landing';
+  
+  // If hash contains Supabase auth tokens (e.g. from email links), route to user portal
+  if (hash.includes('access_token') || hash.includes('type=recovery') || hash.includes('refresh_token')) {
+    if (currentUser) {
+      handleDashboardRouting();
+      return;
+    }
+  }
+
   let routeHandler = routes[hash.substring(1)];
   
   if (!routeHandler) {
-    // Dynamic matching or default back to landing
     if (hash.startsWith('#/')) {
       routeHandler = routes['/landing'];
+    } else if (currentUser) {
+      routeHandler = () => handleDashboardRouting();
     }
   }
   
@@ -609,6 +619,11 @@ function showToast(message, type = 'info') {
 }
 
 // 7. Supabase Authentication Actions
+let isPasswordRecoveryFlow = false;
+if (window.location.hash && window.location.hash.includes('type=recovery')) {
+  isPasswordRecoveryFlow = true;
+}
+
 async function initAuth() {
   try {
     const { data: { session } } = await sb.auth.getSession();
@@ -620,6 +635,7 @@ async function initAuth() {
     sb.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state change event:', event);
       if (event === 'PASSWORD_RECOVERY') {
+        isPasswordRecoveryFlow = true;
         openPasswordResetModal();
       }
       
@@ -701,11 +717,19 @@ async function fetchUserProfile(uid) {
     document.getElementById('menu-user-name').innerText = data.name;
     document.getElementById('menu-user-role').innerText = TRANSLATIONS[currentLanguage][`role_${data.role}`] || data.role;
     
-    // Check for dashboard redirects
-    if (window.location.hash === '#/landing' || window.location.hash === '') {
+    // Check for dashboard redirects (auto-navigate into portal)
+    const curHash = window.location.hash || '';
+    if (curHash === '#/landing' || curHash === '' || curHash.includes('access_token') || curHash.includes('type=recovery') || curHash.includes('refresh_token')) {
       handleDashboardRouting();
     } else {
       router();
+    }
+
+    // If entering via password recovery link, open the modal once user is in their portal
+    if (isPasswordRecoveryFlow) {
+      setTimeout(() => {
+        openPasswordResetModal();
+      }, 400);
     }
     
     // Load unread notifications counter
