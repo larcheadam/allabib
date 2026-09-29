@@ -620,6 +620,7 @@ function showToast(message, type = 'info') {
 
 // 7. Supabase Authentication Actions
 let isPasswordRecoveryFlow = false;
+let isUpdatingPassword = false;
 if (window.location.hash && window.location.hash.includes('type=recovery')) {
   isPasswordRecoveryFlow = true;
 }
@@ -641,7 +642,10 @@ async function initAuth() {
       
       if (session) {
         currentUser = session.user;
-        await fetchUserProfile(currentUser.id);
+        // Skip re-fetching profile during password update to prevent page re-render
+        if (!isUpdatingPassword) {
+          await fetchUserProfile(currentUser.id);
+        }
       } else {
         currentUser = null;
         userProfile = null;
@@ -911,15 +915,21 @@ if (pwdResetForm) {
     submitBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${currentLanguage === 'ar' ? 'جاري الحفظ...' : 'Enregistrement...'}`;
     
     try {
+      isUpdatingPassword = true;
       const { data, error } = await sb.auth.updateUser({ password: newPass });
       if (error) throw error;
       
       // Update qr_code_token in profiles if user has email to keep QR sync
       if (currentUser && userProfile && userProfile.email) {
         const newQrToken = `allabib_auth:${userProfile.email}:${newPass}`;
-        await sb.from('profiles').update({ qr_code_token: newQrToken }).eq('id', currentUser.id);
-        userProfile.qr_code_token = newQrToken;
+        const { error: qrErr } = await sb.from('profiles').update({ qr_code_token: newQrToken }).eq('id', currentUser.id);
+        if (!qrErr) {
+          userProfile.qr_code_token = newQrToken;
+        }
       }
+      
+      // Reset the recovery flag so the modal won't reopen
+      isPasswordRecoveryFlow = false;
       
       showToast(currentLanguage === 'ar' ? 'تم تعيين كلمة المرور الجديدة بنجاح!' : 'Mot de passe mis à jour avec succès !', 'success');
       closePasswordResetModal();
@@ -939,6 +949,7 @@ if (pwdResetForm) {
         errBox.classList.remove('hidden');
       }
     } finally {
+      isUpdatingPassword = false;
       submitBtn.disabled = false;
       submitBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> <span>${currentLanguage === 'ar' ? 'حفظ وتعيين كلمة المرور' : 'Enregistrer le mot de passe'}</span>`;
     }
