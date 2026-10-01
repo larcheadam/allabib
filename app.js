@@ -101,6 +101,7 @@ const TRANSLATIONS = {
     resource_title: "عنوان الدرس أو المورد",
     select_file: "اختر الملف (PDF أو صورة فقط، بحد أقصى 10 ميغابايت)",
     btn_share_resource: "رفع ونشر الملف",
+    my_published_resources: "الموارد والتمارين المنشورة حالياً",
     sub_request_title: "طلب إلغاء حصة دراسية أو إبلاغ بطلب تعويض",
     sub_request_desc: "يرجى تسجيل النموذج التالي لإبلاغ الإدارة عن تغيير طارئ أو غياب مبرمج ليتمكن الإداري من ترتيب الأستاذ البديل وتحديث لوحة التلاميذ.",
     select_slot_to_modify: "اختر الحصة المراد تعديلها",
@@ -295,6 +296,7 @@ const TRANSLATIONS = {
     resource_title: "Titre de la ressource",
     select_file: "Choisir le fichier (PDF ou Image uniquement, max 10 Mo)",
     btn_share_resource: "Publier la ressource",
+    my_published_resources: "Ressources et devoirs publiés",
     sub_request_title: "Déclarer une absence ou demander un remplacement",
     sub_request_desc: "Remplissez ce formulaire pour informer l'administration de tout changement planifié afin qu'elle puisse réassigner la séance et avertir les élèves.",
     select_slot_to_modify: "Choisir la séance �  modifier",
@@ -999,7 +1001,7 @@ async function checkTimetableConflict(classId, teacherId, roomNumber, dayOfWeek,
         };
       }
       // 3. Class Conflict
-      if (slot.class_id === parseInt(classId)) {
+      if (String(slot.class_id) === String(classId)) {
         return { 
           hasConflict: true, 
           message: currentLanguage === 'ar' ? "تعارض: هذا القسم لديه مادة أخرى في نفس الوقت." : "Conflict: Class has another scheduled subject at this time." 
@@ -1264,11 +1266,12 @@ function renderTimetableGrid(slots, tbodyId) {
         const room = match.room_number || '';
 
         slotTd.innerHTML = `
-          <div class="timetable-slot-cell">
+          <div class="timetable-slot-cell" ${tbodyId === 'admin-timetable-grid-body' ? `data-slot-id="${match.id}" style="cursor:pointer" onclick="window.openEditTimetableModal('${match.id}')"` : ''}>
             <div class="timetable-subject">${subName}</div>
             ${className ? `<div class="timetable-class"><i class="fa-solid fa-users"></i> ${className}</div>` : ''}
             ${teacherName ? `<div class="timetable-teacher"><i class="fa-solid fa-chalkboard-user"></i> ${teacherName}</div>` : ''}
             ${room ? `<div class="timetable-room"><i class="fa-solid fa-door-open"></i> ${room}</div>` : ''}
+            ${tbodyId === 'admin-timetable-grid-body' ? `<div class="mt-1"><span class="badge btn-primary" style="font-size:0.65rem;cursor:pointer"><i class="fa-solid fa-pen"></i> تعديل</span></div>` : ''}
           </div>
         `;
       } else {
@@ -1542,6 +1545,7 @@ async function loadTeacherDashboard() {
   
   // Populate select boxes in forms
   populateTeacherSelects(schedule);
+  loadTeacherResources();
 }
 
 async function populateTeacherSelects(schedule) {
@@ -1904,12 +1908,104 @@ document.getElementById('teacher-resource-form').onsubmit = async (e) => {
     showToast(currentLanguage === 'ar' ? "تم نشر الدرس والوسائط بنجاح!" : "Resource published successfully!", "success");
     document.getElementById('teacher-resource-form').reset();
     await loadStudentResources(classId);
+    await loadTeacherResources();
   } catch (err) {
     console.error("Resource upload detailed traceback:", err);
     showToast(err.message || (currentLanguage === 'ar' ? "فشل رفع الملف" : "Failed to upload file"), "danger");
   } finally {
     uploadBtn.disabled = false;
     if (progressWrapper) progressWrapper.classList.add('hidden');
+  }
+};
+
+// TEACHER RESOURCES & HOMEWORK MANAGEMENT (LIST & DELETE)
+async function loadTeacherResources() {
+  const container = document.getElementById('teacher-resources-list');
+  if (!container) return;
+
+  const teacherId = (currentUser && currentUser.id) || (userProfile && userProfile.id);
+  if (!teacherId) {
+    container.innerHTML = `<p class="empty-notif text-muted">${currentLanguage === 'ar' ? 'تعذر جلب الموارد' : 'Impossible de charger les ressources'}</p>`;
+    return;
+  }
+
+  container.innerHTML = `<div class="text-center p-3 text-muted"><i class="fa-solid fa-spinner fa-spin"></i> ${currentLanguage === 'ar' ? 'جاري تحميل الموارد...' : 'Chargement...'}</div>`;
+
+  const { data: list, error } = await sb
+    .from('resources')
+    .select('*, classes(name), subjects(name_ar, name_fr)')
+    .eq('teacher_id', teacherId)
+    .order('id', { ascending: false });
+
+  if (error) {
+    console.error('Error loading teacher resources:', error);
+    container.innerHTML = `<p class="text-danger">${error.message}</p>`;
+    return;
+  }
+
+  if (!list || list.length === 0) {
+    container.innerHTML = `<p class="empty-notif text-muted">${currentLanguage === 'ar' ? 'لم تقم بنشر أي موارد أو تمارين بعد.' : 'Aucune ressource partagée pour le moment.'}</p>`;
+    return;
+  }
+
+  container.innerHTML = '';
+  list.forEach(res => {
+    const item = document.createElement('div');
+    item.className = 'card-nested mb-3 p-3 d-flex justify-content-between align-items-center flex-wrap gap-2';
+
+    const className = res.classes ? res.classes.name : '';
+    const subjectName = res.subjects ? (currentLanguage === 'ar' ? res.subjects.name_ar : res.subjects.name_fr) : '';
+    const isHomework = res.file_type === 'homework' || (!res.file_url || res.file_url === '#' || res.file_url.startsWith('homework:'));
+    const isVid = res.file_type === 'video' || (res.file_url && (res.file_url.includes('youtube.com') || res.file_url.includes('youtu.be')));
+    const isImg = res.file_type === 'image';
+
+    let icon = 'fa-file-pdf text-primary';
+    if (isImg) icon = 'fa-file-image text-warning';
+    else if (isVid) icon = 'fa-video text-danger';
+    else if (isHomework) icon = 'fa-book-open-reader text-success';
+
+    let hwPreview = '';
+    if (res.file_url && res.file_url.startsWith('homework:')) {
+      const hwText = res.file_url.replace('homework:', '').trim();
+      hwPreview = `<div class="small text-muted mt-1" style="max-width:450px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"><i class="fa-solid fa-pencil text-success"></i> ${hwText}</div>`;
+    }
+
+    const typeBadge = isHomework
+      ? `<span class="badge btn-success ms-2 me-2" style="font-size:0.75rem">${currentLanguage === 'ar' ? 'واجب / تمرين منزلي' : 'Devoir'}</span>`
+      : '';
+
+    item.innerHTML = `
+      <div class="d-flex align-items-center gap-3">
+        <i class="fa-solid ${icon} fa-2x"></i>
+        <div>
+          <strong class="d-block">${res.title} ${typeBadge}</strong>
+          <small class="text-muted">${className ? className + ' | ' : ''}${subjectName}</small>
+          ${hwPreview}
+        </div>
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        ${(res.file_url && res.file_url !== '#' && !res.file_url.startsWith('homework:')) ? `<a href="${res.file_url}" target="_blank" class="btn btn-sm btn-secondary"><i class="fa-solid fa-arrow-up-right-from-square"></i> ${currentLanguage === 'ar' ? 'معاينة' : 'Voir'}</a>` : ''}
+        <button class="btn btn-sm btn-danger" onclick="deleteTeacherResource(${res.id})">
+          <i class="fa-solid fa-trash"></i> ${currentLanguage === 'ar' ? 'حذف' : 'Supprimer'}
+        </button>
+      </div>
+    `;
+    container.appendChild(item);
+  });
+}
+
+window.deleteTeacherResource = async (id) => {
+  const confirmMsg = currentLanguage === 'ar' ? 'هل أنت متأكد من حذف هذا المورد/التمرين نهائياً؟' : 'Voulez-vous vraiment supprimer cette ressource ?';
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const { error } = await sb.from('resources').delete().eq('id', id);
+    if (error) throw error;
+    showToast(currentLanguage === 'ar' ? 'تم حذف المورد بنجاح' : 'Ressource supprimée avec succès', 'success');
+    await loadTeacherResources();
+  } catch (err) {
+    console.error('Delete resource error:', err);
+    showToast(err.message || (currentLanguage === 'ar' ? 'فشل حذف المورد' : 'Échec de la suppression'), 'danger');
   }
 };
 
@@ -2250,7 +2346,7 @@ document.getElementById('admin-timetable-form').onsubmit = async (e) => {
   const day = parseInt(document.getElementById('tt-day').value);
   const start = document.getElementById('tt-start').value + ":00";
   const end = document.getElementById('tt-end').value + ":00";
-  const room = document.getElementById('tt-room').value.trim();
+  const room = document.getElementById('tt-room').value.trim() || null;
   
   // Conflict verification
   const check = await checkTimetableConflict(classId, teacherId, room, day, start, end);
@@ -2300,6 +2396,193 @@ async function triggerAdminScheduleView(classId) {
   
   if (error) console.error('Timetable load error:', error);
   renderTimetableGrid(slots || [], 'admin-timetable-grid-body');
+}
+
+// EDIT & DELETE TIMETABLE SLOT MODAL LOGIC
+let currentEditSlotId = null;
+
+window.openEditTimetableModal = async (slotId) => {
+  currentEditSlotId = slotId;
+  const modal = document.getElementById('edit-timetable-modal');
+  const errBox = document.getElementById('edit-tt-error');
+  if (errBox) {
+    errBox.classList.add('hidden');
+    errBox.innerText = '';
+  }
+
+  // Sync select options from admin creator form if already populated
+  const editClass = document.getElementById('edit-tt-class');
+  const editSub = document.getElementById('edit-tt-subject');
+  const editTeacher = document.getElementById('edit-tt-teacher');
+  const ttClass = document.getElementById('tt-class');
+  const ttSub = document.getElementById('tt-subject');
+  const ttTeacher = document.getElementById('tt-teacher');
+
+  if (ttClass && editClass && ttClass.options.length > 1) {
+    editClass.innerHTML = ttClass.innerHTML;
+  }
+  if (ttSub && editSub && ttSub.options.length > 1) {
+    editSub.innerHTML = ttSub.innerHTML;
+  }
+  if (ttTeacher && editTeacher && ttTeacher.options.length > 1) {
+    editTeacher.innerHTML = ttTeacher.innerHTML;
+  }
+
+  // If selects are still empty, fetch them
+  if (editClass && editClass.options.length <= 1) {
+    const { data: cls } = await sb.from('classes').select('id, name');
+    if (cls) {
+      editClass.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر القسم' : 'Choisir la classe'} --</option>` +
+        cls.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+    }
+  }
+  if (editSub && editSub.options.length <= 1) {
+    const { data: subs } = await sb.from('subjects').select('id, name_ar, name_fr');
+    if (subs) {
+      editSub.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر المادة' : 'Choisir la matière'} --</option>` +
+        subs.map(s => `<option value="${s.id}">${currentLanguage === 'ar' ? s.name_ar : s.name_fr}</option>`).join('');
+    }
+  }
+  if (editTeacher && editTeacher.options.length <= 1) {
+    const { data: tchs } = await sb.from('profiles').select('id, name').eq('role', 'teacher');
+    if (tchs) {
+      editTeacher.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر الأستاذ' : 'Choisir l\'enseignant'} --</option>` +
+        tchs.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+    }
+  }
+
+  // Fetch slot details
+  const { data: slot, error } = await sb
+    .from('timetables')
+    .select('*')
+    .eq('id', slotId)
+    .single();
+
+  if (error || !slot) {
+    showToast(currentLanguage === 'ar' ? "فشل استرجاع بيانات الحصة" : "Failed to load session details", "danger");
+    return;
+  }
+
+  if (editClass) editClass.value = slot.class_id || '';
+  if (editSub) editSub.value = slot.subject_id || '';
+  if (editTeacher) editTeacher.value = slot.teacher_id || '';
+  document.getElementById('edit-tt-day').value = slot.day_of_week;
+  document.getElementById('edit-tt-start').value = slot.start_time ? slot.start_time.substring(0, 5) : '';
+  document.getElementById('edit-tt-end').value = slot.end_time ? slot.end_time.substring(0, 5) : '';
+  document.getElementById('edit-tt-room').value = slot.room_number || '';
+
+  if (modal) modal.classList.remove('hidden');
+};
+
+function closeEditTimetableModal() {
+  const modal = document.getElementById('edit-timetable-modal');
+  if (modal) modal.classList.add('hidden');
+  currentEditSlotId = null;
+}
+
+const closeEditTtBtn = document.getElementById('close-edit-tt-btn');
+if (closeEditTtBtn) closeEditTtBtn.onclick = closeEditTimetableModal;
+
+const cancelEditTtBtn = document.getElementById('btn-cancel-edit-tt');
+if (cancelEditTtBtn) cancelEditTtBtn.onclick = closeEditTimetableModal;
+
+// Edit timetable form submit
+const editTtForm = document.getElementById('edit-timetable-form');
+if (editTtForm) {
+  editTtForm.onsubmit = async (e) => {
+    e.preventDefault();
+    if (!currentEditSlotId) return;
+
+    const classId = document.getElementById('edit-tt-class').value;
+    const subjectId = document.getElementById('edit-tt-subject').value;
+    const teacherId = document.getElementById('edit-tt-teacher').value;
+    const day = parseInt(document.getElementById('edit-tt-day').value);
+    const start = document.getElementById('edit-tt-start').value + ":00";
+    const end = document.getElementById('edit-tt-end').value + ":00";
+    const room = document.getElementById('edit-tt-room').value.trim() || null;
+    const errBox = document.getElementById('edit-tt-error');
+    const saveBtn = document.getElementById('btn-save-edit-tt');
+
+    if (errBox) {
+      errBox.classList.add('hidden');
+      errBox.innerText = '';
+    }
+
+    // Conflict verification excluding current slot
+    const check = await checkTimetableConflict(classId, teacherId, room, day, start, end, currentEditSlotId);
+    if (check.hasConflict) {
+      if (errBox) {
+        errBox.innerText = check.message;
+        errBox.classList.remove('hidden');
+      } else {
+        showToast(check.message, "danger");
+      }
+      return;
+    }
+
+    saveBtn.disabled = true;
+    try {
+      const { error } = await sb.from('timetables').update({
+        class_id: classId,
+        subject_id: subjectId,
+        teacher_id: teacherId,
+        day_of_week: day,
+        start_time: start,
+        end_time: end,
+        room_number: room
+      }).eq('id', currentEditSlotId);
+
+      if (error) throw error;
+
+      showToast(currentLanguage === 'ar' ? "تم تعديل الحصة بنجاح!" : "Session updated successfully!", "success");
+      closeEditTimetableModal();
+
+      // Refresh admin schedule view
+      const viewClassSelect = document.getElementById('timetable-view-class-select');
+      if (viewClassSelect && viewClassSelect.value) {
+        triggerAdminScheduleView(viewClassSelect.value);
+      } else {
+        triggerAdminScheduleView(classId);
+      }
+    } catch (err) {
+      console.error("Edit timetable error:", err);
+      if (errBox) {
+        errBox.innerText = err.message || (currentLanguage === 'ar' ? "فشل تعديل الحصة" : "Failed to update session");
+        errBox.classList.remove('hidden');
+      }
+    } finally {
+      saveBtn.disabled = false;
+    }
+  };
+}
+
+// Delete timetable slot button
+const deleteTtBtn = document.getElementById('btn-delete-tt-slot');
+if (deleteTtBtn) {
+  deleteTtBtn.onclick = async () => {
+    if (!currentEditSlotId) return;
+    const confirmMsg = currentLanguage === 'ar' ? "هل أنت متأكد من رغبتك في حذف هذه الحصة نهائياً من الجدول الزمني؟" : "Voulez-vous vraiment supprimer cette séance de l'emploi du temps ?";
+    if (!confirm(confirmMsg)) return;
+
+    deleteTtBtn.disabled = true;
+    try {
+      const { error } = await sb.from('timetables').delete().eq('id', currentEditSlotId);
+      if (error) throw error;
+
+      showToast(currentLanguage === 'ar' ? "تم حذف الحصة بنجاح!" : "Session deleted successfully!", "success");
+      closeEditTimetableModal();
+
+      const viewClassSelect = document.getElementById('timetable-view-class-select');
+      if (viewClassSelect && viewClassSelect.value) {
+        triggerAdminScheduleView(viewClassSelect.value);
+      }
+    } catch (err) {
+      console.error("Delete timetable error:", err);
+      showToast(err.message || (currentLanguage === 'ar' ? "فشل حذف الحصة" : "Failed to delete session"), "danger");
+    } finally {
+      deleteTtBtn.disabled = false;
+    }
+  };
 }
 
 // DOWNLOAD TIMETABLE TEMPLATE
@@ -3625,6 +3908,9 @@ document.addEventListener('DOMContentLoaded', () => {
         
         el.classList.add('active');
         document.getElementById(teachTabs[tabId]).classList.add('active');
+        if (tabId === 'teach-tab-files') {
+          loadTeacherResources();
+        }
       };
     }
   });
