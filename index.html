@@ -438,6 +438,15 @@
               <i class="fa-solid fa-share-nodes"></i>
             </button>
           </form>
+
+          <hr class="my-4">
+          <div class="teacher-resources-list-wrapper mt-4">
+            <h4><i class="fa-solid fa-list-check text-primary"></i> <span data-key="my_published_resources">الموارد والتمارين المنشورة حالياً</span></h4>
+            <p class="text-muted small">يمكنك معاينة أو حذف أي مورد أو تمرين قمت بنشره لتلاميذك.</p>
+            <div id="teacher-resources-list" class="mt-3">
+              <!-- Loaded dynamically via loadTeacherResources() -->
+            </div>
+          </div>
         </div>
 
         <!-- SECTION: Teacher Parent Summons Request -->
@@ -683,8 +692,8 @@
                     <input type="time" id="tt-end" class="form-control" required>
                   </div>
                   <div class="form-group">
-                    <label for="tt-room" data-key="room_number">رقم القاعة</label>
-                    <input type="text" id="tt-room" class="form-control" placeholder="قاعة 12" required>
+                    <label for="tt-room" data-key="room_number">رقم القاعة <small class="text-muted">(اختياري)</small></label>
+                    <input type="text" id="tt-room" class="form-control" placeholder="قاعة 12">
                   </div>
                 </div>
                 <button type="submit" class="btn btn-success mt-3"><i class="fa-solid fa-floppy-disk"></i> <span data-key="btn_save_slot">حفظ وتدقيق الحصة</span></button>
@@ -1233,8 +1242,68 @@
       </div>
     </div>
   </div>
+
+  <!-- Edit Timetable Slot Modal (Admin view) -->
+  <div id="edit-timetable-modal" class="modal-backdrop hidden">
+    <div class="modal-content card" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-pen-to-square text-primary me-2"></i> تعديل الحصة المجدولة</h3>
+        <button class="modal-close" id="close-edit-tt-btn">&times;</button>
+      </div>
+      <div class="modal-body p-3">
+        <form id="edit-timetable-form">
+          <div class="grid-2 mt-2">
+            <div class="form-group mb-2">
+              <label>القسم</label>
+              <select id="edit-tt-class" class="form-control" required></select>
+            </div>
+            <div class="form-group mb-2">
+              <label>المادة</label>
+              <select id="edit-tt-subject" class="form-control" required></select>
+            </div>
+            <div class="form-group mb-2">
+              <label>الأستاذ</label>
+              <select id="edit-tt-teacher" class="form-control" required></select>
+            </div>
+            <div class="form-group mb-2">
+              <label>اليوم</label>
+              <select id="edit-tt-day" class="form-control" required>
+                <option value="0">الإثنين</option>
+                <option value="1">الثلاثاء</option>
+                <option value="2">الأربعاء</option>
+                <option value="3">الخميس</option>
+                <option value="4">الجمعة</option>
+                <option value="5">السبت</option>
+              </select>
+            </div>
+            <div class="form-group mb-2">
+              <label>وقت البدء</label>
+              <input type="time" id="edit-tt-start" class="form-control" required>
+            </div>
+            <div class="form-group mb-2">
+              <label>وقت الإنتهاء</label>
+              <input type="time" id="edit-tt-end" class="form-control" required>
+            </div>
+          </div>
+          <div class="form-group mb-3 mt-2">
+            <label>رقم القاعة <small class="text-muted">(اختياري)</small></label>
+            <input type="text" id="edit-tt-room" class="form-control" placeholder="قاعة 12">
+          </div>
+          <div id="edit-tt-error" class="alert alert-danger mt-2 hidden"></div>
+          <div class="modal-footer mt-4" style="display:flex;gap:8px;justify-content:space-between;align-items:center;">
+            <button type="button" id="btn-delete-tt-slot" class="btn btn-danger"><i class="fa-solid fa-trash"></i> حذف الحصة</button>
+            <div style="display:flex;gap:8px">
+              <button type="button" id="btn-cancel-edit-tt" class="btn btn-secondary">إلغاء</button>
+              <button type="submit" id="btn-save-edit-tt" class="btn btn-success"><i class="fa-solid fa-floppy-disk"></i> حفظ التعديلات</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Application Logic Script -->
-  <script src="app.js?v=v11" defer></script>
+  <script src="app.js?v=v12" defer></script>
 
   <!-- Safety Fallback Script: Guarantee Loader Dismissal -->
   <script>
