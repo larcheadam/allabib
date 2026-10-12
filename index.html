@@ -21,7 +21,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
   <!-- Application Design System -->
-  <link rel="stylesheet" href="styles.css?v=v10">
+  <link rel="stylesheet" href="styles.css?v=v12">
 
   <!-- External Libraries (Supabase, HTML5-QRCode, QRCode.js) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.8/dist/umd/supabase.js"></script>
@@ -196,6 +196,32 @@
                     <i class="fa-solid fa-file-image"></i> <span data-key="upload_qr_image">أو اختر صورة رمز QR من جهازك</span>
                   </label>
                   <input type="file" id="qr-input-file" accept="image/*" class="hidden">
+                </div>
+              </div>
+            </div>
+
+            <!-- PWA Install / Download App Box in Login Area -->
+            <div class="login-pwa-install-box mt-4 pt-3 border-top text-center">
+              <div class="d-flex align-items-center justify-content-center gap-2 mb-1">
+                <i class="fa-solid fa-mobile-screen-button text-primary"></i>
+                <strong class="text-primary" data-key="install_app_box_title">تطبيق مؤسسة اللبيب (Allabib App)</strong>
+              </div>
+              <p class="small text-muted mb-2" data-key="install_app_box_desc">
+                ثبّت التطبيق على هاتفك أو حاسوبك لتسجيل الدخول السريع وتلقي الإشعارات بدون متصفح.
+              </p>
+              <button type="button" id="btn-login-install-app" class="btn btn-accent btn-sm w-100 d-flex align-items-center justify-content-center gap-2">
+                <i class="fa-solid fa-download"></i>
+                <span data-key="btn_install_app_now">تثبيت / تحميل التطبيق الآن</span>
+              </button>
+              
+              <!-- Helpful guide popup if browser doesn't trigger prompt automatically -->
+              <div id="pwa-install-guide" class="pwa-install-guide mt-2 text-start p-2 bg-light border rounded small hidden">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                  <strong class="text-primary"><i class="fa-solid fa-circle-info"></i> <span data-key="how_to_install">طريقة التثبيت على جهازك:</span></strong>
+                  <button type="button" id="btn-close-pwa-guide" class="btn-close-sm" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:1.1rem;line-height:1;">&times;</button>
+                </div>
+                <div id="pwa-guide-content" class="text-muted" style="font-size: 0.8rem; line-height: 1.4;">
+                  <!-- Dynamically populated according to iOS / Android / Desktop -->
                 </div>
               </div>
             </div>
@@ -859,6 +885,24 @@
               <div class="card-nested mt-4">
                 <h4 data-key="system_users_directory">إدارة الحسابات المسجلة وبطاقات QR</h4>
                 
+                <!-- Bulk Class QR Badges Toolbar -->
+                <div class="card-nested mb-3 p-3 bg-light border rounded">
+                  <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div>
+                      <h5 class="m-0 mb-1"><i class="fa-solid fa-print text-primary"></i> <strong>طباعة بطاقات التعريف ورموز QR حسب القسم</strong></h5>
+                      <small class="text-muted">اختر القسم لطباعة جميع بطاقات التلاميذ ورموز QR دفعة واحدة على صفحات A4 منظمة وجاهزة للتوزيع.</small>
+                    </div>
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                      <select id="print-class-qr-select" class="form-control" style="min-width: 220px;">
+                        <option value="">-- اختر القسم للطباعة --</option>
+                      </select>
+                      <button id="btn-print-class-qr" class="btn btn-primary" type="button">
+                        <i class="fa-solid fa-qrcode"></i> <span>طباعة بطاقات القسم</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 <div class="user-search-wrap"><i class="fa-solid fa-magnifying-glass"></i><input id="admin-users-search" class="form-control" type="search" placeholder="ابحث بالاسم، البريد، الهاتف أو القسم…"></div>
                 <div class="table-responsive mt-2">
                   <table class="table">
@@ -1302,8 +1346,43 @@
     </div>
   </div>
 
+  <!-- Bulk Class QR Cards Print Modal (Admin view) -->
+  <div id="bulk-qr-print-modal" class="modal-backdrop hidden">
+    <div class="modal-content card" style="max-width: 960px; max-height: 90vh; display: flex; flex-direction: column;">
+      <div class="modal-header bulk-qr-no-print">
+        <div class="d-flex align-items-center gap-2">
+          <i class="fa-solid fa-id-card text-primary fa-lg"></i>
+          <div>
+            <h3 id="bulk-qr-modal-title" class="m-0">بطاقات التعريف ورموز QR للتلاميذ</h3>
+            <small id="bulk-qr-modal-subtitle" class="text-muted">قسم: --</small>
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <span id="bulk-qr-modal-count" class="badge btn-primary" style="font-size: 0.85rem;">0 تلميذ</span>
+          <button class="modal-close" id="close-bulk-qr-modal-btn">&times;</button>
+        </div>
+      </div>
+      
+      <div class="bulk-qr-actions-bar p-3 bg-light border-bottom bulk-qr-no-print d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="text-muted small"><i class="fa-solid fa-circle-info text-primary"></i> معاينة البطاقات قبل الطباعة. مرتبة ومجهزة للطباعة على أوراق A4 (بطاقتان في كل صف للقص والتوزيع بسهولة).</span>
+        <div class="d-flex gap-2">
+          <button type="button" id="btn-cancel-bulk-qr" class="btn btn-secondary btn-sm">إلغاء</button>
+          <button type="button" id="btn-do-bulk-print" class="btn btn-success btn-sm">
+            <i class="fa-solid fa-print"></i> <strong>طباعة البطاقات الآن (Print / PDF)</strong>
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-body p-3" id="bulk-qr-scroll-area" style="overflow-y: auto; flex: 1;">
+        <div id="bulk-qr-cards-grid" class="bulk-qr-grid">
+          <!-- Dynamically generated student cards -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Main Application Logic Script -->
-  <script src="app.js?v=v12" defer></script>
+  <script src="app.js?v=v14" defer></script>
 
   <!-- Safety Fallback Script: Guarantee Loader Dismissal -->
   <script>
