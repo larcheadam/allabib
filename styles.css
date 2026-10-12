@@ -617,6 +617,29 @@ html[lang="fr"] .menu-item {
   margin-bottom: 1.5rem;
 }
 
+/* Login PWA Box */
+.login-pwa-install-box {
+  background: color-mix(in srgb, var(--primary-color) 4%, var(--card-bg));
+  border: 1px dashed var(--accent-color) !important;
+  border-radius: 12px;
+  padding: 1rem;
+  transition: all var(--transition-fast);
+}
+
+.login-pwa-install-box:hover {
+  background: color-mix(in srgb, var(--primary-color) 8%, var(--card-bg));
+}
+
+.pwa-install-guide {
+  animation: fadeIn 0.3s ease-out;
+  border-left: 3px solid var(--accent-color) !important;
+}
+
+html[lang="ar"] .pwa-install-guide {
+  border-left: none !important;
+  border-right: 3px solid var(--accent-color) !important;
+}
+
 /* 8. Modern Input Forms & Buttons Layout */
 .form-group {
   display: flex;
@@ -1646,15 +1669,151 @@ html[lang="fr"] .toast.toast-warning { border-left-color: var(--warning-color); 
   }
 }
 
+/* Bulk Class QR Badges Screen Styles */
+.bulk-qr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  padding: 10px;
+}
+
+.printable-student-badge {
+  background: #ffffff;
+  border: 2px solid #0284c7;
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: #0f172a;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+
+.printable-student-badge .badge-header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.printable-student-badge .badge-logo-img {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
+}
+
+.printable-student-badge .badge-school-info {
+  text-align: center;
+}
+
+.printable-student-badge .badge-school-info h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0284c7;
+  line-height: 1.2;
+}
+
+.printable-student-badge .badge-school-info p {
+  margin: 0;
+  font-size: 0.65rem;
+  letter-spacing: 0.5px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.printable-student-badge .badge-divider {
+  height: 2px;
+  background: linear-gradient(to right, transparent, #0284c7, transparent);
+  margin: 6px 0 10px 0;
+}
+
+.printable-student-badge .badge-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex: 1;
+}
+
+.printable-student-badge .badge-student-meta {
+  flex: 1;
+  text-align: right;
+}
+
+.printable-student-badge .badge-student-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.3;
+  margin-bottom: 4px;
+}
+
+.printable-student-badge .badge-student-class {
+  display: inline-block;
+  background: #e0f2fe;
+  color: #0369a1;
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 3px 8px;
+  border-radius: 6px;
+  margin-bottom: 4px;
+}
+
+.printable-student-badge .badge-student-role {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.printable-student-badge .badge-qr-wrapper {
+  background: #ffffff;
+  padding: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.printable-student-badge .badge-qr-image {
+  width: 105px;
+  height: 105px;
+  display: block;
+}
+
+.printable-student-badge .badge-footer {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #cbd5e1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.printable-student-badge .badge-footer code {
+  font-size: 0.65rem;
+  color: #0284c7;
+  font-weight: 700;
+}
+
 /* Print CSS Styles overrides for QR Card Modal and documents */
 @media print {
   body * {
     visibility: hidden !important;
   }
-  #qr-print-modal, #qr-print-modal * {
+
+  /* 1. Single QR Card Modal Print */
+  #qr-print-modal:not(.hidden),
+  #qr-print-modal:not(.hidden) * {
     visibility: visible !important;
   }
-  #qr-print-modal {
+  #qr-print-modal:not(.hidden) {
     position: fixed !important;
     top: 0 !important;
     left: 0 !important;
@@ -1666,24 +1825,80 @@ html[lang="fr"] .toast.toast-warning { border-left-color: var(--warning-color); 
     justify-content: center !important;
     z-index: 999999 !important;
   }
-  .modal-card {
-    border: 3px solid #0284c7 !important;
-    border-radius: 16px !important;
+  #qr-print-modal:not(.hidden) .school-badge-card {
+    border: 2px solid #0284c7 !important;
+    max-width: 380px !important;
     box-shadow: none !important;
-    background: #ffffff !important;
-    color: #0f172a !important;
-    max-width: 420px !important;
-    width: 90% !important;
-    padding: 2rem !important;
-    text-align: center !important;
   }
-  .modal-backdrop, .modal-footer, #close-qr-modal-btn, #btn-print-qr-card, .app-header {
-    display: none !important;
-  }
-  #modal-qr-canvas canvas, #modal-qr-canvas img {
+  #qr-print-modal:not(.hidden) #modal-qr-canvas canvas,
+  #qr-print-modal:not(.hidden) #modal-qr-canvas img {
     display: block !important;
     margin: 1rem auto !important;
     visibility: visible !important;
+  }
+
+  /* 2. Bulk Class QR Cards Modal Print */
+  #bulk-qr-print-modal:not(.hidden),
+  #bulk-qr-print-modal:not(.hidden) * {
+    visibility: visible !important;
+  }
+  #bulk-qr-print-modal:not(.hidden) {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    background: #ffffff !important;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    z-index: 999999 !important;
+  }
+  #bulk-qr-print-modal:not(.hidden) .modal-content {
+    max-width: 100% !important;
+    max-height: none !important;
+    width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    overflow: visible !important;
+  }
+  #bulk-qr-print-modal:not(.hidden) #bulk-qr-scroll-area {
+    overflow: visible !important;
+    padding: 0 !important;
+    max-height: none !important;
+  }
+  .bulk-qr-no-print {
+    display: none !important;
+  }
+  .bulk-qr-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8mm !important;
+    padding: 5mm !important;
+  }
+  .printable-student-badge {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    border: 1.5px dashed #0284c7 !important;
+    box-shadow: none !important;
+    border-radius: 8px !important;
+    padding: 10px !important;
+    background: #ffffff !important;
+  }
+  .printable-student-badge .badge-qr-image {
+    width: 95px !important;
+    height: 95px !important;
+  }
+
+  /* General print hides */
+  .modal-backdrop:not(#bulk-qr-print-modal):not(#qr-print-modal),
+  .modal-footer,
+  .modal-close,
+  .app-header,
+  .btn {
+    display: none !important;
   }
 }
 
