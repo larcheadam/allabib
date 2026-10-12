@@ -199,6 +199,10 @@ const TRANSLATIONS = {
     install_app_title: "تثبيت تطبيق مؤسسة اللبيب",
     install_app_desc: "تثبيت التطبيق على شاشتك للاستعمال دون اتصال واستقبال إشعارات الحصص.",
     btn_install: "تثبيت",
+    install_app_box_title: "تطبيق مؤسسة اللبيب (Allabib App)",
+    install_app_box_desc: "ثبّت التطبيق على هاتفك أو حاسوبك لتسجيل الدخول السريع وتلقي الإشعارات بدون متصفح.",
+    btn_install_app_now: "تثبيت / تحميل التطبيق الآن",
+    how_to_install: "طريقة التثبيت على جهازك:",
     btn_close: "إغلاق",
     id_card_print: "بطاقة التعريف الرقمية للطالب",
     print: "طباعة البطاقة",
@@ -394,6 +398,10 @@ const TRANSLATIONS = {
     install_app_title: "Installer l'application Allabib",
     install_app_desc: "Installez l'application sur votre écran d'accueil pour l'utiliser hors ligne et recevoir vos alertes.",
     btn_install: "Installer",
+    install_app_box_title: "Application Établissement Allabib",
+    install_app_box_desc: "Installez l'application sur votre smartphone ou PC pour un accès rapide et des notifications en direct.",
+    btn_install_app_now: "Installer / Télécharger l'application",
+    how_to_install: "Comment installer sur votre appareil :",
     btn_close: "Fermer",
     id_card_print: "Carte numérique d'élève",
     print: "Imprimer",
@@ -2201,7 +2209,10 @@ async function loadLevelsClassesTree() {
         classItems += `
           <li>
             <span><i class="fa-solid fa-graduation-cap"></i> ${c.name}</span>
-            <button class="btn btn-secondary btn-sm" onclick="deleteClass(${c.id})"><i class="fa-solid fa-trash text-danger"></i></button>
+            <div class="d-flex gap-1 align-items-center">
+              <button class="btn btn-primary btn-sm" onclick="printClassQrCodes(${c.id}, '${c.name.replace(/'/g, "\\'")}')" title="طباعة بطاقات QR لهذا القسم"><i class="fa-solid fa-qrcode"></i> QR</button>
+              <button class="btn btn-secondary btn-sm" onclick="deleteClass(${c.id})"><i class="fa-solid fa-trash text-danger"></i></button>
+            </div>
           </li>`;
       });
       
@@ -2259,6 +2270,13 @@ async function populateAdminSelects() {
       if (classes) classes.forEach(c => sel.innerHTML += `<option value="${c.id}">${c.name}</option>`);
     }
   });
+
+  const printClassQrSelect = document.getElementById('print-class-qr-select');
+  if (printClassQrSelect) {
+    printClassQrSelect.innerHTML = `<option value="">-- ${currentLanguage === 'ar' ? 'اختر القسم للطباعة' : 'Choisir la classe'} --</option>
+      <option value="all">${currentLanguage === 'ar' ? 'جميع الأقسام (كل التلاميذ)' : 'Toutes les classes'}</option>`;
+    if (classes) classes.forEach(c => printClassQrSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`);
+  }
   
   const levelSelects = [
     document.getElementById('cls-level-select'),
@@ -3145,6 +3163,139 @@ document.getElementById('btn-print-qr-card').onclick = () => {
   window.print();
 };
 
+// BULK CLASS QR CODES PRINTING
+window.printClassQrCodes = async (classId, className) => {
+  const modal = document.getElementById('bulk-qr-print-modal');
+  const grid = document.getElementById('bulk-qr-cards-grid');
+  const titleEl = document.getElementById('bulk-qr-modal-title');
+  const subtitleEl = document.getElementById('bulk-qr-modal-subtitle');
+  const countEl = document.getElementById('bulk-qr-modal-count');
+
+  if (!modal || !grid) return;
+
+  grid.innerHTML = `<div class="text-center p-4 text-muted w-100" style="grid-column: 1 / -1;"><i class="fa-solid fa-spinner fa-spin fa-2x"></i><p class="mt-2">${currentLanguage === 'ar' ? 'جاري تجهيز وتوليد بطاقات الرموز QR للتلاميذ...' : 'Génération des cartes QR...'}</p></div>`;
+  modal.classList.remove('hidden');
+
+  const isAll = (classId === 'all' || !classId);
+  const displayTitle = isAll 
+    ? (currentLanguage === 'ar' ? 'جميع الأقسام (كل التلاميذ)' : 'Toutes les classes') 
+    : (className || (currentLanguage === 'ar' ? 'القسم المحدد' : 'Classe sélectionnée'));
+
+  if (titleEl) titleEl.innerText = currentLanguage === 'ar' ? `بطاقات التعريف ورموز QR - ${displayTitle}` : `Cartes QR des élèves - ${displayTitle}`;
+  if (subtitleEl) subtitleEl.innerText = isAll ? (currentLanguage === 'ar' ? 'دفعة واحدة لجميع تلاميذ المؤسسة' : 'Tous les élèves') : `${currentLanguage === 'ar' ? 'القسم:' : 'Classe:'} ${displayTitle}`;
+
+  try {
+    let query = sb
+      .from('profiles')
+      .select('*, classes(*)')
+      .eq('role', 'student');
+
+    if (!isAll) {
+      query = query.eq('class_id', classId);
+    }
+
+    query = query.order('name');
+    const { data: students, error } = await query;
+
+    if (error) throw error;
+
+    if (!students || students.length === 0) {
+      grid.innerHTML = `<div class="text-center p-4 text-muted w-100" style="grid-column: 1 / -1;"><i class="fa-solid fa-circle-exclamation fa-2x text-warning"></i><p class="mt-2">${currentLanguage === 'ar' ? 'لا يوجد تلاميذ مسجلون في هذا القسم حالياً.' : 'Aucun élève inscrit dans cette classe.'}</p></div>`;
+      if (countEl) countEl.innerText = '0';
+      return;
+    }
+
+    if (countEl) countEl.innerText = `${students.length} ${currentLanguage === 'ar' ? 'تلميذ' : 'élèves'}`;
+    grid.innerHTML = '';
+
+    // Generate badge for each student with QR code
+    for (const student of students) {
+      const studentClass = student.classes ? student.classes.name : (displayTitle || '-');
+      const qrPayload = student.qr_code_token || `allabib_auth:${student.email || student.id}:Allabib2027!`;
+      
+      let qrDataUrl = '';
+      try {
+        qrDataUrl = await QRCode.toDataURL(qrPayload, {
+          width: 140,
+          margin: 1,
+          color: {
+            dark: '#0f172a',
+            light: '#ffffff'
+          }
+        });
+      } catch (qrErr) {
+        console.error('QR Gen error for', student.name, qrErr);
+      }
+
+      const badge = document.createElement('div');
+      badge.className = 'printable-student-badge';
+      badge.innerHTML = `
+        <div class="badge-header">
+          <img src="logo.jpg" alt="Logo" class="badge-logo-img">
+          <div class="badge-school-info">
+            <h4>مؤسسة اللبيب</h4>
+            <p>ÉTABLISSEMENT ALLABIB</p>
+          </div>
+        </div>
+        <div class="badge-divider"></div>
+        <div class="badge-body">
+          <div class="badge-student-meta">
+            <div class="badge-student-name">${student.name}</div>
+            <div class="badge-student-class"><i class="fa-solid fa-graduation-cap"></i> ${studentClass}</div>
+            <div class="badge-student-role">${currentLanguage === 'ar' ? 'تلميذ (Student)' : 'Élève'}</div>
+          </div>
+          <div class="badge-qr-wrapper">
+            ${qrDataUrl ? `<img src="${qrDataUrl}" alt="QR" class="badge-qr-image">` : `<div style="width:105px;height:105px;display:flex;align-items:center;justify-content:center;color:#94a3b8;"><i class="fa-solid fa-qrcode fa-3x"></i></div>`}
+          </div>
+        </div>
+        <div class="badge-footer">
+          <span>${currentLanguage === 'ar' ? 'البوابة المدرسية الرقمية' : 'Portail Scolaire'}</span>
+          <code>${student.email ? student.email.split('@')[0] : 'ALLABIB'}</code>
+        </div>
+      `;
+      grid.appendChild(badge);
+    }
+  } catch (err) {
+    console.error('Bulk QR generation error:', err);
+    grid.innerHTML = `<div class="text-center p-4 text-danger w-100" style="grid-column: 1 / -1;"><p>${err.message || 'فشل توليد البطاقات'}</p></div>`;
+  }
+};
+
+const closeBulkQrBtn = document.getElementById('close-bulk-qr-modal-btn');
+if (closeBulkQrBtn) {
+  closeBulkQrBtn.onclick = () => {
+    document.getElementById('bulk-qr-print-modal').classList.add('hidden');
+  };
+}
+
+const cancelBulkQrBtn = document.getElementById('btn-cancel-bulk-qr');
+if (cancelBulkQrBtn) {
+  cancelBulkQrBtn.onclick = () => {
+    document.getElementById('bulk-qr-print-modal').classList.add('hidden');
+  };
+}
+
+const doBulkPrintBtn = document.getElementById('btn-do-bulk-print');
+if (doBulkPrintBtn) {
+  doBulkPrintBtn.onclick = () => {
+    window.print();
+  };
+}
+
+const printClassQrBtn = document.getElementById('btn-print-class-qr');
+if (printClassQrBtn) {
+  printClassQrBtn.onclick = () => {
+    const sel = document.getElementById('print-class-qr-select');
+    if (!sel || !sel.value) {
+      showToast(currentLanguage === 'ar' ? 'يرجى اختيار القسم أولاً للطباعة' : 'Veuillez sélectionner une classe', 'warning');
+      return;
+    }
+    const classId = sel.value;
+    const className = sel.options[sel.selectedIndex].text;
+    window.printClassQrCodes(classId, className);
+  };
+}
+
 window.deleteUserAccount = async (uid) => {
   if (!confirm('هل تريد حذف هذا الحساب نهائياً؟')) return;
   const { error } = await sb.rpc('admin_delete_user', { target_user_id: uid });
@@ -3694,29 +3845,140 @@ function isHolidayToday() {
   return false;
 }
 
-// 14. PWA Installation Event Listener
-let deferredPrompt;
+// 14. PWA Installation Event Listeners & Login Card Helper
+let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
   
+  // Show header button if exists
+  const pwaHeaderBtn = document.getElementById('pwa-install-btn');
+  if (pwaHeaderBtn) pwaHeaderBtn.classList.remove('hidden');
+
   // Display the bottom install banner
-  document.getElementById('pwa-install-banner').classList.remove('hidden');
+  const banner = document.getElementById('pwa-install-banner');
+  if (banner) banner.classList.remove('hidden');
 });
 
-document.getElementById('pwa-btn-install').onclick = async () => {
+// Helper function to trigger installation or show friendly guide
+async function triggerPwaInstallation() {
+  const guide = document.getElementById('pwa-install-guide');
+  const guideContent = document.getElementById('pwa-guide-content');
+
+  // 1. Check if already running as installed app
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+  if (isStandalone) {
+    showToast(currentLanguage === 'ar' ? 'التطبيق مثبت بالفعل ويعمل على جهازك!' : 'L\'application est déjà installée sur votre appareil !', 'success');
+    if (guide) guide.classList.add('hidden');
+    return;
+  }
+
+  // 2. If browser gave us native install prompt, launch it
   if (deferredPrompt) {
     deferredPrompt.prompt();
     const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to install prompter: ${outcome}`);
+    console.log(`User response to install prompt: ${outcome}`);
+    if (outcome === 'accepted') {
+      showToast(currentLanguage === 'ar' ? 'شكراً لك! تم تثبيت تطبيق مؤسسة اللبيب بنجاح.' : 'Application installée avec succès !', 'success');
+      if (guide) guide.classList.add('hidden');
+      const banner = document.getElementById('pwa-install-banner');
+      if (banner) banner.classList.add('hidden');
+      const pwaHeaderBtn = document.getElementById('pwa-install-btn');
+      if (pwaHeaderBtn) pwaHeaderBtn.classList.add('hidden');
+    }
     deferredPrompt = null;
-    document.getElementById('pwa-install-banner').classList.add('hidden');
+    return;
   }
-};
 
-document.getElementById('pwa-btn-dismiss').onclick = () => {
-  document.getElementById('pwa-install-banner').classList.add('hidden');
-};
+  // 3. Fallback: Browser didn't trigger prompt (e.g. iOS Safari, or prompt not ready/dismissed)
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+  const isAndroid = /Android/.test(ua);
+
+  if (guide && guideContent) {
+    if (isIOS) {
+      guideContent.innerHTML = currentLanguage === 'ar' ? `
+        <div class="mb-1"><strong class="text-dark">📱 على أجهزة آيفون (Safari):</strong></div>
+        <ol class="ps-3 pe-3 mb-0" style="padding-right: 1.2rem;">
+          <li>اضغط على زر <strong>المشاركة</strong> (أيقونة <i class="fa-solid fa-arrow-up-from-bracket"></i> أسفل الشاشة).</li>
+          <li>مرر للأسفل واختر <strong>'إضافة إلى الشاشة الرئيسية'</strong> (Sur l'écran d'accueil).</li>
+          <li>اضغط على <strong>إضافة (Ajouter)</strong> وسيظهر التطبيق كأيقونة على شاشتك.</li>
+        </ol>
+      ` : `
+        <div class="mb-1"><strong class="text-dark">📱 Sur iPhone / iPad (Safari) :</strong></div>
+        <ol class="ps-3 mb-0">
+          <li>Appuyez sur le bouton <strong>Partager</strong> (<i class="fa-solid fa-arrow-up-from-bracket"></i> en bas).</li>
+          <li>Faites défiler et choisissez <strong>'Sur l'écran d'accueil'</strong>.</li>
+          <li>Appuyez sur <strong>Ajouter</strong> en haut à droite.</li>
+        </ol>
+      `;
+    } else if (isAndroid) {
+      guideContent.innerHTML = currentLanguage === 'ar' ? `
+        <div class="mb-1"><strong class="text-dark">📱 على أجهزة أندرويد (Chrome):</strong></div>
+        <ol class="ps-3 pe-3 mb-0" style="padding-right: 1.2rem;">
+          <li>اضغط على قائمة المتصفح (النقاط الثلاث <strong>⋮</strong> بأعلى الشاشة).</li>
+          <li>اختر <strong>'تثبيت التطبيق'</strong> أو <strong>'إضافة إلى الشاشة الرئيسية'</strong>.</li>
+          <li>أكّد التثبيت وسيصبح التطبيق متاحاً على شاشتك فوراً.</li>
+        </ol>
+      ` : `
+        <div class="mb-1"><strong class="text-dark">📱 Sur Android (Chrome) :</strong></div>
+        <ol class="ps-3 mb-0">
+          <li>Appuyez sur le menu (les 3 points <strong>⋮</strong> en haut).</li>
+          <li>Choisissez <strong>'Installer l'application'</strong> ou <strong>'Ajouter à l'écran d'accueil'</strong>.</li>
+          <li>Confirmez l'installation.</li>
+        </ol>
+      `;
+    } else {
+      guideContent.innerHTML = currentLanguage === 'ar' ? `
+        <div class="mb-1"><strong class="text-dark">💻 على متصفح الحاسوب (Chrome / Edge):</strong></div>
+        <ol class="ps-3 pe-3 mb-0" style="padding-right: 1.2rem;">
+          <li>انقر على أيقونة التثبيت (<i class="fa-solid fa-download"></i> أو 🖥️) في شريط عنوان المتصفح بالأعلى.</li>
+          <li>أو افتح القائمة (<strong>⋮</strong>) واختر <strong>'تثبيت تطبيق مؤسسة اللبيب'</strong>.</li>
+        </ol>
+      ` : `
+        <div class="mb-1"><strong class="text-dark">💻 Sur ordinateur (Chrome / Edge) :</strong></div>
+        <ol class="ps-3 mb-0">
+          <li>Cliquez sur l'icône d'installation dans la barre d'adresse en haut.</li>
+          <li>Ou ouvrez le menu (<strong>⋮</strong>) puis <strong>'Installer l'application'</strong>.</li>
+        </ol>
+      `;
+    }
+    guide.classList.toggle('hidden');
+  } else {
+    showToast(currentLanguage === 'ar' ? 'افتح قائمة المتصفح (⋮) واختر تثبيت التطبيق' : 'Ouvrez le menu du navigateur pour installer', 'info');
+  }
+}
+
+// Bind login PWA install button
+const btnLoginInstallApp = document.getElementById('btn-login-install-app');
+if (btnLoginInstallApp) {
+  btnLoginInstallApp.onclick = triggerPwaInstallation;
+}
+
+const btnClosePwaGuide = document.getElementById('btn-close-pwa-guide');
+if (btnClosePwaGuide) {
+  btnClosePwaGuide.onclick = () => {
+    const guide = document.getElementById('pwa-install-guide');
+    if (guide) guide.classList.add('hidden');
+  };
+}
+
+const pwaBtnInstall = document.getElementById('pwa-btn-install');
+if (pwaBtnInstall) {
+  pwaBtnInstall.onclick = triggerPwaInstallation;
+}
+
+const pwaBtnDismiss = document.getElementById('pwa-btn-dismiss');
+if (pwaBtnDismiss) {
+  pwaBtnDismiss.onclick = () => {
+    document.getElementById('pwa-install-banner').classList.add('hidden');
+  };
+}
+
+const pwaHeaderInstallBtn = document.getElementById('pwa-install-btn');
+if (pwaHeaderInstallBtn) {
+  pwaHeaderInstallBtn.onclick = triggerPwaInstallation;
+}
 
 // 15. Helper utilities functions
 function getDayNameKey(index) {
@@ -3956,28 +4218,6 @@ document.addEventListener('DOMContentLoaded', () => {
     catch (err) { resultEl.textContent = err.message; showToast(err.message, 'danger'); }
     finally { bulkImportButton.disabled = false; }
   };
-  // Optional PWA Installation Prompt (Purely optional step for users)
-  let deferredInstallPrompt = null;
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredInstallPrompt = e;
-    const pwaBtn = document.getElementById('pwa-install-btn');
-    if (pwaBtn) pwaBtn.classList.remove('hidden');
-  });
-
-  const pwaBtn = document.getElementById('pwa-install-btn');
-  if (pwaBtn) {
-    pwaBtn.addEventListener('click', async () => {
-      if (deferredInstallPrompt) {
-        deferredInstallPrompt.prompt();
-        const { outcome } = await deferredInstallPrompt.userChoice;
-        if (outcome === 'accepted') {
-          pwaBtn.classList.add('hidden');
-        }
-        deferredInstallPrompt = null;
-      }
-    });
-  }
 
   // Register service worker asynchronously in background (optional, non-blocking)
   if ('serviceWorker' in navigator) {
