@@ -1194,6 +1194,15 @@ function renderTimetableGrid(slots, tbodyId) {
     return;
   }
 
+  // Deduplicate: keep only one slot per (day_of_week + start_time + subject_id)
+  const seen = new Set();
+  slots = slots.filter(s => {
+    const key = `${s.day_of_week}|${s.start_time}|${s.subject_id}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
   // Dynamically extract unique time blocks from actual slot data
   const uniqueTimes = [...new Set(slots.map(s => s.start_time + '|' + s.end_time))];
   uniqueTimes.sort((a, b) => a.localeCompare(b));
@@ -1248,7 +1257,8 @@ function renderTimetableGrid(slots, tbodyId) {
 
       const match = slots.find(s =>
         s.day_of_week === day &&
-        s.start_time.substring(0, 5) === block.start.substring(0, 5)
+        s.start_time.substring(0, 5) === block.start.substring(0, 5) &&
+        s.end_time.substring(0, 5) === block.end.substring(0, 5)
       );
 
       if (match) {
