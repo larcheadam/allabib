@@ -1389,6 +1389,7 @@ async function loadStudentAbsences(studentId) {
     .from('attendance')
     .select('*, timetables(*, subjects(*), profiles!teacher_id(*))')
     .eq('student_id', studentId)
+    .in('status', ['absent', 'late'])
     .order('date', { ascending: false });
     
   const tbody = document.getElementById('student-attendance-body');
@@ -1403,9 +1404,12 @@ async function loadStudentAbsences(studentId) {
       if (rec.status === 'absent') {
         statusText = currentLanguage === 'ar' ? 'غائب' : 'Absent';
         statusClass = 'text-danger';
-      } else {
+      } else if (rec.status === 'late') {
         statusText = currentLanguage === 'ar' ? 'متأخر' : 'En retard';
         statusClass = 'text-warning';
+      } else {
+        statusText = currentLanguage === 'ar' ? 'حاضر' : 'Présent';
+        statusClass = 'text-success';
       }
       
       const justification = rec.justified 
@@ -3331,6 +3335,7 @@ async function loadAdminAbsencesList() {
   const { data: list } = await sb
     .from('attendance')
     .select('*, profiles(*), timetables(*, subjects(*))')
+    .in('status', ['absent', 'late'])
     .order('date', { ascending: false });
     
   const tbody = document.getElementById('admin-absence-table-body');
@@ -3339,10 +3344,17 @@ async function loadAdminAbsencesList() {
   if (list && list.length > 0) {
     list.forEach(item => {
       const row = document.createElement('tr');
-      const statusLbl = item.status === 'absent' 
-        ? (currentLanguage === 'ar' ? 'غياب' : 'Absent') 
-        : (currentLanguage === 'ar' ? 'تأخر' : 'Retard');
-      const statusClass = item.status === 'absent' ? 'text-danger' : 'text-warning';
+      let statusLbl, statusClass;
+      if (item.status === 'absent') {
+        statusLbl = currentLanguage === 'ar' ? 'غياب' : 'Absent';
+        statusClass = 'text-danger';
+      } else if (item.status === 'late') {
+        statusLbl = currentLanguage === 'ar' ? 'تأخر' : 'Retard';
+        statusClass = 'text-warning';
+      } else {
+        statusLbl = currentLanguage === 'ar' ? 'حاضر' : 'Présent';
+        statusClass = 'text-success';
+      }
       
       const subName = item.timetables && item.timetables.subjects
         ? (currentLanguage === 'ar' ? item.timetables.subjects.name_ar : item.timetables.subjects.name_fr)
@@ -3367,8 +3379,11 @@ async function loadAdminAbsencesList() {
       `;
       tbody.appendChild(row);
     });
+  } else {
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">${currentLanguage === 'ar' ? 'لا توجد سجلات غياب أو تأخر' : 'Aucune absence ou retard enregistré'}</td></tr>`;
   }
 }
+
 
 window.toggleAbsenceJustification = async (id, currentVal) => {
   const { error } = await sb
@@ -3860,92 +3875,45 @@ window.addEventListener('beforeinstallprompt', (e) => {
   if (banner) banner.classList.remove('hidden');
 });
 
-// Helper function to trigger installation or show friendly guide
+// Helper function to directly trigger PWA installation
 async function triggerPwaInstallation() {
-  const guide = document.getElementById('pwa-install-guide');
-  const guideContent = document.getElementById('pwa-guide-content');
-
   // 1. Check if already running as installed app
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (isStandalone) {
-    showToast(currentLanguage === 'ar' ? 'التطبيق مثبت بالفعل ويعمل على جهازك!' : 'L\'application est déjà installée sur votre appareil !', 'success');
-    if (guide) guide.classList.add('hidden');
+    showToast(currentLanguage === 'ar' ? 'التطبيق مثبت بالفعل على جهازك!' : 'L\'application est déjà installée !', 'success');
     return;
   }
 
-  // 2. If browser gave us native install prompt, launch it
-  if (deferredPrompt) {
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to install prompt: ${outcome}`);
-    if (outcome === 'accepted') {
-      showToast(currentLanguage === 'ar' ? 'شكراً لك! تم تثبيت تطبيق مؤسسة اللبيب بنجاح.' : 'Application installée avec succès !', 'success');
-      if (guide) guide.classList.add('hidden');
-      const banner = document.getElementById('pwa-install-banner');
-      if (banner) banner.classList.add('hidden');
-      const pwaHeaderBtn = document.getElementById('pwa-install-btn');
-      if (pwaHeaderBtn) pwaHeaderBtn.classList.add('hidden');
-    }
+  // 2. Try module-level or window-level deferred prompt (captured early in <head>)
+  const prompt = deferredPrompt || window.deferredPrompt;
+  if (prompt) {
+    try {
+      await prompt.prompt();
+      const { outcome } = await prompt.userChoice;
+      if (outcome === 'accepted') {
+        showToast(currentLanguage === 'ar' ? 'تم تثبيت التطبيق بنجاح!' : 'Application installée avec succès !', 'success');
+        const banner = document.getElementById('pwa-install-banner');
+        if (banner) banner.classList.add('hidden');
+        const pwaHeaderBtn = document.getElementById('pwa-install-btn');
+        if (pwaHeaderBtn) pwaHeaderBtn.classList.add('hidden');
+      }
+    } catch(e) { console.warn('Install prompt error:', e); }
     deferredPrompt = null;
+    window.deferredPrompt = null;
     return;
   }
 
-  // 3. Fallback: Browser didn't trigger prompt (e.g. iOS Safari, or prompt not ready/dismissed)
+  // 3. Fallback: no prompt available (iOS, already installed, or prompt dismissed)
   const ua = navigator.userAgent || '';
   const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
-  const isAndroid = /Android/.test(ua);
-
-  if (guide && guideContent) {
-    if (isIOS) {
-      guideContent.innerHTML = currentLanguage === 'ar' ? `
-        <div class="mb-1"><strong class="text-dark">📱 على أجهزة آيفون (Safari):</strong></div>
-        <ol class="ps-3 pe-3 mb-0" style="padding-right: 1.2rem;">
-          <li>اضغط على زر <strong>المشاركة</strong> (أيقونة <i class="fa-solid fa-arrow-up-from-bracket"></i> أسفل الشاشة).</li>
-          <li>مرر للأسفل واختر <strong>'إضافة إلى الشاشة الرئيسية'</strong> (Sur l'écran d'accueil).</li>
-          <li>اضغط على <strong>إضافة (Ajouter)</strong> وسيظهر التطبيق كأيقونة على شاشتك.</li>
-        </ol>
-      ` : `
-        <div class="mb-1"><strong class="text-dark">📱 Sur iPhone / iPad (Safari) :</strong></div>
-        <ol class="ps-3 mb-0">
-          <li>Appuyez sur le bouton <strong>Partager</strong> (<i class="fa-solid fa-arrow-up-from-bracket"></i> en bas).</li>
-          <li>Faites défiler et choisissez <strong>'Sur l'écran d'accueil'</strong>.</li>
-          <li>Appuyez sur <strong>Ajouter</strong> en haut à droite.</li>
-        </ol>
-      `;
-    } else if (isAndroid) {
-      guideContent.innerHTML = currentLanguage === 'ar' ? `
-        <div class="mb-1"><strong class="text-dark">📱 على أجهزة أندرويد (Chrome):</strong></div>
-        <ol class="ps-3 pe-3 mb-0" style="padding-right: 1.2rem;">
-          <li>اضغط على قائمة المتصفح (النقاط الثلاث <strong>⋮</strong> بأعلى الشاشة).</li>
-          <li>اختر <strong>'تثبيت التطبيق'</strong> أو <strong>'إضافة إلى الشاشة الرئيسية'</strong>.</li>
-          <li>أكّد التثبيت وسيصبح التطبيق متاحاً على شاشتك فوراً.</li>
-        </ol>
-      ` : `
-        <div class="mb-1"><strong class="text-dark">📱 Sur Android (Chrome) :</strong></div>
-        <ol class="ps-3 mb-0">
-          <li>Appuyez sur le menu (les 3 points <strong>⋮</strong> en haut).</li>
-          <li>Choisissez <strong>'Installer l'application'</strong> ou <strong>'Ajouter à l'écran d'accueil'</strong>.</li>
-          <li>Confirmez l'installation.</li>
-        </ol>
-      `;
-    } else {
-      guideContent.innerHTML = currentLanguage === 'ar' ? `
-        <div class="mb-1"><strong class="text-dark">💻 على متصفح الحاسوب (Chrome / Edge):</strong></div>
-        <ol class="ps-3 pe-3 mb-0" style="padding-right: 1.2rem;">
-          <li>انقر على أيقونة التثبيت (<i class="fa-solid fa-download"></i> أو 🖥️) في شريط عنوان المتصفح بالأعلى.</li>
-          <li>أو افتح القائمة (<strong>⋮</strong>) واختر <strong>'تثبيت تطبيق مؤسسة اللبيب'</strong>.</li>
-        </ol>
-      ` : `
-        <div class="mb-1"><strong class="text-dark">💻 Sur ordinateur (Chrome / Edge) :</strong></div>
-        <ol class="ps-3 mb-0">
-          <li>Cliquez sur l'icône d'installation dans la barre d'adresse en haut.</li>
-          <li>Ou ouvrez le menu (<strong>⋮</strong>) puis <strong>'Installer l'application'</strong>.</li>
-        </ol>
-      `;
-    }
-    guide.classList.toggle('hidden');
+  if (isIOS) {
+    showToast(currentLanguage === 'ar'
+      ? 'على iPhone: اضغط زر المشاركة ثم "إضافة إلى الشاشة الرئيسية"'
+      : 'Sur iPhone: appuyez sur Partager puis "Sur l\'écran d\'accueil"', 'info');
   } else {
-    showToast(currentLanguage === 'ar' ? 'افتح قائمة المتصفح (⋮) واختر تثبيت التطبيق' : 'Ouvrez le menu du navigateur pour installer', 'info');
+    showToast(currentLanguage === 'ar'
+      ? 'افتح قائمة المتصفح (⋮) واختر "تثبيت التطبيق"'
+      : 'Ouvrez le menu (⋮) et choisissez "Installer l\'application"', 'info');
   }
 }
 
@@ -3953,14 +3921,6 @@ async function triggerPwaInstallation() {
 const btnLoginInstallApp = document.getElementById('btn-login-install-app');
 if (btnLoginInstallApp) {
   btnLoginInstallApp.onclick = triggerPwaInstallation;
-}
-
-const btnClosePwaGuide = document.getElementById('btn-close-pwa-guide');
-if (btnClosePwaGuide) {
-  btnClosePwaGuide.onclick = () => {
-    const guide = document.getElementById('pwa-install-guide');
-    if (guide) guide.classList.add('hidden');
-  };
 }
 
 const pwaBtnInstall = document.getElementById('pwa-btn-install');
